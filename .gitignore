@@ -19,3 +19,5 @@ DerivedData/
 # Secrets — nothing should ever hand-carry a key or token into a commit
 .env
 *.pem
+
+.node_modules/

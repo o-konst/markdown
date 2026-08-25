@@ -10,9 +10,13 @@ agent loop, plus an embedded **Vue 3** web UI for the markdown preview/outline p
 also ships an **MCP server** sidecar (macOS only, currently) so Claude Code / Claude
 Desktop can read, search, and edit the same notes folder from outside the app.
 
-This repository is **not a git repository** — there is no `.git` at the root. Don't run
-`git status`/`git log`/branch commands here expecting them to work at the top level.
-(`markdown_vault` *does* create its own `.git` inside whatever notes folder — "vault" — a
+This repository became a **git repository** on 2026-08-25 (`main` branch, no commits yet as
+of that date) — before that it had no `.git` at the root, so older notes elsewhere in this
+codebase describing it as not version-controlled are stale. A root `.gitignore` excludes
+per-IDE/build cruft (Xcode `xcuserdata/`/`DerivedData/`, .NET `bin/`/`obj/`, Visual Studio
+`.vs/`); `rust/` and `vue-project/` carry their own `.gitignore`s for `target/`/
+`node_modules/`/`dist/`.
+(`markdown_vault` *also* creates its own `.git` inside whatever notes folder — "vault" — a
 user opens in the app; that's a separate, per-vault repository used for undo history, not
 this repo's own version control.)
 
