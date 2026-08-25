@@ -1,15 +1,34 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import DocumentOutline from './components/DocumentOutline.vue'
 import MarkdownPreview from './components/MarkdownPreview.vue'
+import WysiwygEditor from './editor/WysiwygEditor.vue'
 import { reportOutlineState } from '@/bridge/nativeBridge'
 import { useActiveHeading } from '@/composables/useActiveHeading'
 import { useDocumentOutline } from '@/composables/useDocumentOutline'
 import { useMarkdownPreview } from '@/composables/useMarkdownPreview'
 
 const { html, source, preferences } = useMarkdownPreview()
-const { html: documentHtml, nodes, ids, hasOutline } = useDocumentOutline(html)
+const { html: documentHtml, nodes: readingNodes, ids: readingIds, hasOutline: readingHasOutline } =
+  useDocumentOutline(html)
 
+/** Reading view (sanitized HTML from Rust) or the WYSIWYG editor — see the "Architecture
+ * decision" section of `.claude/docs/live-preview-editing-research.md`. Both stay mounted
+ * (`v-show`, not `v-if`) so switching back and forth never rebuilds the editor or loses
+ * its undo history, and the WYSIWYG editor's own bridge subscription stays live even
+ * while Reading view is what's visible. */
+const mode = ref<'reading' | 'edit'>('reading')
+const wysiwygRef = shallowRef<InstanceType<typeof WysiwygEditor> | null>(null)
+
+const nodes = computed(() => (mode.value === 'edit' ? (wysiwygRef.value?.nodes ?? []) : readingNodes.value))
+const ids = computed(() => (mode.value === 'edit' ? (wysiwygRef.value?.ids ?? []) : readingIds.value))
+const hasOutline = computed(() =>
+  mode.value === 'edit' ? (wysiwygRef.value?.hasOutline ?? false) : readingHasOutline.value,
+)
+
+// Reading view and the WYSIWYG editor render inside this same scrolling container (only
+// one visible at a time via `v-show`), so scroll-spy has one scroller to track regardless
+// of mode.
 const scroller = ref<HTMLElement | null>(null)
 const activeId = useActiveHeading(scroller, ids)
 
@@ -22,6 +41,10 @@ function scrollToHeading(id: string) {
   scroller.value
     ?.querySelector(`#${CSS.escape(id)}`)
     ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function toggleMode() {
+  mode.value = mode.value === 'reading' ? 'edit' : 'reading'
 }
 
 // MARK: - Resizable divider
@@ -95,12 +118,31 @@ function startResize(event: PointerEvent) {
       />
     </template>
 
-    <div ref="scroller" class="content" :style="{ fontSize: `${preferences.fontSize}px` }">
-      <MarkdownPreview
-        :class="{ 'page-width': preferences.contentWidth === 'page' }"
-        :html="documentHtml"
-        :is-empty="source.trim().length === 0"
-      />
+    <div class="content-pane">
+      <div class="mode-toolbar">
+        <button
+          type="button"
+          class="mode-toggle"
+          :aria-pressed="mode === 'edit'"
+          @click="toggleMode"
+        >
+          {{ mode === 'edit' ? 'Reading view' : 'Edit' }}
+        </button>
+      </div>
+      <div ref="scroller" class="content" :style="{ fontSize: `${preferences.fontSize}px` }">
+        <MarkdownPreview
+          v-show="mode === 'reading'"
+          :class="{ 'page-width': preferences.contentWidth === 'page' }"
+          :html="documentHtml"
+          :is-empty="source.trim().length === 0"
+        />
+        <WysiwygEditor
+          v-show="mode === 'edit'"
+          ref="wysiwygRef"
+          :class="{ 'page-width': preferences.contentWidth === 'page' }"
+          :initial-text="source"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -136,6 +178,33 @@ function startResize(event: PointerEvent) {
 
 .splitter:hover::before {
   background: var(--color-border-hover);
+}
+
+.content-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mode-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem 1rem 0;
+}
+
+.mode-toggle {
+  font-size: 0.85em;
+  padding: 0.3em 0.8em;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-background-soft);
+  cursor: pointer;
+}
+
+.mode-toggle[aria-pressed='true'] {
+  background: var(--color-background-mute);
 }
 
 .content {

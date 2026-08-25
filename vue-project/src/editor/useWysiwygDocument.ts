@@ -1,5 +1,5 @@
-import { Editor } from '@tiptap/core'
-import { EditorState } from '@tiptap/pm/state'
+import { Editor } from '@tiptap/vue-3'
+import { history } from '@tiptap/pm/history'
 
 import { onDocumentChange as bridgeOnDocumentChange, reportEdit as bridgeReportEdit } from '../bridge/nativeBridge'
 import { createExtensions } from './schema'
@@ -30,6 +30,14 @@ export interface WysiwygDocument {
   editor: Editor
   /** Forces immediate serialization + report, cancelling any pending debounce. Native must await this before switching the open file, or trailing keystrokes can be lost. */
   flushPendingEdit: () => Promise<string>
+  /**
+   * Applies a full-document replacement — same guarded, history-resetting path the
+   * bridge's `onDocumentChange` pushes go through. Exposed publicly so the owning
+   * component can also feed it the initial handshake-delivered document (which arrives
+   * via `connect()`'s reply, not `onDocumentChange` — see `useMarkdownPreview`), through
+   * the same safe, idempotent function rather than a separate one-off "seed" path.
+   */
+  applyExternalText: (text: string) => void
   /** Detaches the bridge subscription and destroys the editor. Call from the owning component's `onBeforeUnmount` — not wired to Vue lifecycle here so this composable stays usable outside a component (e.g. in tests). */
   dispose: () => void
 }
@@ -112,23 +120,31 @@ export function useWysiwygDocument(options: WysiwygDocumentOptions = {}): Wysiwy
     editor.destroy()
   }
 
-  return { editor, flushPendingEdit, dispose }
+  return { editor, flushPendingEdit, applyExternalText, dispose }
 }
 
 /**
- * Clears ProseMirror's undo/redo stacks by rebuilding the editor's `EditorState` via
- * `EditorState.create` (which re-`init`s every plugin, including `prosemirror-history`,
- * from scratch) instead of `state.apply(tr)` (which carries plugin state, including
- * history, forward). `prosemirror-history` exposes no direct "clear" API — this is the
- * standard ProseMirror-ecosystem technique for resetting it. Preserves the current
- * document and plugin set; only the undo/redo stacks are discarded.
+ * Clears ProseMirror's undo/redo stacks by unregistering the `prosemirror-history`
+ * plugin and registering a fresh instance — `state.reconfigure()` (which
+ * `editor.unregisterPlugin`/`registerPlugin` both use) `init()`s any plugin that wasn't
+ * in the previous plugin list, giving the new instance empty done/undone stacks, while
+ * every other plugin's state carries forward unchanged. `prosemirror-history` exposes no
+ * direct "clear" API — this is the standard ProseMirror-ecosystem technique.
+ *
+ * Deliberately goes through `editor.unregisterPlugin`/`registerPlugin` rather than
+ * calling `editor.view.updateState()` directly: `@tiptap/vue-3`'s `Editor` subclass
+ * tracks state in a separate Vue `customRef` (`reactiveState`) that only that subclass's
+ * overridden `registerPlugin`/`unregisterPlugin` (and its own transaction pipeline) know
+ * to update — a raw `view.updateState()` call bypasses it, leaving `editor.state` (the
+ * getter callers actually read) stale even though the real view state changed. Confirmed
+ * by a failing test before this fix: `undoDepth(editor.state)` still read the pre-reset
+ * depth despite the view itself having been reset correctly underneath it.
+ *
+ * `history` is registered with `prosemirror-history`'s own defaults (`depth: 100,
+ * newGroupDelay: 500`), matching what `@tiptap/extensions`' `UndoRedo` extension (part of
+ * `StarterKit`, unconfigured in this schema) itself uses.
  */
 function resetHistory(editor: Editor): void {
-  const { state } = editor.view
-  const freshState = EditorState.create({
-    schema: state.schema,
-    doc: state.doc,
-    plugins: state.plugins,
-  })
-  editor.view.updateState(freshState)
+  editor.unregisterPlugin('history')
+  editor.registerPlugin(history())
 }

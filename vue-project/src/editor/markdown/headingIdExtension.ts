@@ -30,9 +30,14 @@ export const HeadingWithId = Heading.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
+      // Rendered (unlike `level`, above) so an explicit `{#id}` actually lands as a real
+      // DOM `id` attribute — needed for the outline sidebar's anchor scrolling to find
+      // the heading at all. Auto-slugged headings (the common case, no explicit `{#id}`)
+      // don't get an id from the doc model itself; `WysiwygEditor.vue` stamps those onto
+      // the rendered DOM directly from `useEditorOutline`'s computed ids, the same way
+      // `useDocumentOutline.ts`'s `buildOutline` mutates ids onto parsed HTML.
       id: {
         default: null,
-        rendered: false,
       },
     }
   },

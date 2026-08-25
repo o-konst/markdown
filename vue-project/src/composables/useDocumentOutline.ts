@@ -1,4 +1,5 @@
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
+import { slugify } from './slugify'
 
 /** One heading in the document, with its descendants nested underneath. */
 export interface OutlineNode {
@@ -12,15 +13,6 @@ const HEADING_SELECTOR = 'h1, h2, h3, h4, h5, h6'
 
 /** A document needs at least this many headings before an outline is worth showing. */
 const MIN_HEADINGS = 2
-
-/** Turns heading text into a URL fragment. */
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[^\p{L}\p{N}]+/gu, '-')
-    .replace(/^-+|-+$/g, '')
-}
 
 interface Outline {
   /** The input fragment, with an `id` on every heading. */
