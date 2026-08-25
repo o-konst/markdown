@@ -54,12 +54,17 @@ struct ContentView: View {
             detail
                 .toolbar {
                     ToolbarItem {
+                        // The WYSIWYG editor (`preview`, below) is the primary way to edit
+                        // now — this toggle shows the plain-text source as a fallback, not
+                        // the main editing surface. Kept, not removed: a real two-way
+                        // binding to `workspace.text` like everything else, so editing
+                        // here is never an echo, just another writer.
                         Toggle(isOn: $isEditing) {
-                            Label("Edit", systemImage: "square.and.pencil")
+                            Label("Source", systemImage: "curlybraces")
                         }
                         .toggleStyle(.button)
                         .keyboardShortcut("e", modifiers: .command)
-                        .help(isEditing ? "Hide the editor" : "Edit the Markdown source")
+                        .help(isEditing ? "Hide the raw Markdown source" : "Show the raw Markdown source")
                     }
                 }
         }
@@ -149,7 +154,8 @@ struct ContentView: View {
         MarkdownWebView(
             text: workspace.text,
             preferences: preferences,
-            onOutlineAvailabilityChange: { isOutlineAvailable = $0 }
+            onOutlineAvailabilityChange: { isOutlineAvailable = $0 },
+            onDocumentEdit: { workspace.text = $0 }
         )
     }
 

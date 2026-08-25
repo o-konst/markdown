@@ -114,8 +114,18 @@ export function useWysiwygDocument(options: WysiwygDocumentOptions = {}): Wysiwy
 
   const unsubscribe = subscribeToDocumentChange(applyExternalText)
 
+  // Exposes `flushPendingEdit` on the same global native pushes arrive through, so native
+  // can call it directly (`window.__markdownHost?.flushPendingEdit?.()` over
+  // `callAsyncJavaScript`) before switching the open file — see the `MarkdownHost`
+  // interface doc comment in `nativeBridge.ts`. Single-owner, unlike `setDocument`'s
+  // multi-subscriber chain, so a plain assign/restore is enough.
+  const host = (window.__markdownHost ??= {})
+  const previousFlush = host.flushPendingEdit
+  host.flushPendingEdit = flushPendingEdit
+
   function dispose() {
     unsubscribe()
+    if (host.flushPendingEdit === flushPendingEdit) host.flushPendingEdit = previousFlush
     clearPendingDebounce()
     editor.destroy()
   }

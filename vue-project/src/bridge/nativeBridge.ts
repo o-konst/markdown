@@ -77,6 +77,16 @@ type HostRequest =
 export interface MarkdownHost {
   setDocument?(text: string): void
   setPreferences?(preferences: unknown): void
+  /**
+   * Native → JS, the opposite direction of `documentEdit`: asks the WYSIWYG editor to
+   * report its current text immediately, cancelling any pending debounce, and resolves
+   * with what it flushed. Native calls this (via `callAsyncJavaScript`, same pattern as
+   * `setDocument`'s push) before switching the open file — a debounced edit that hasn't
+   * reported yet would otherwise be lost, since native reads `text` synchronously at that
+   * point. Installed by `useWysiwygDocument`, not a multi-subscriber event like
+   * `setDocument`/`setPreferences` — there's exactly one owner.
+   */
+  flushPendingEdit?(): Promise<string>
 }
 
 declare global {
