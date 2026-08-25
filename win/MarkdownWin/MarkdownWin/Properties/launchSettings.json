@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "MarkdownWin (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "MarkdownWin (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

@@ -1,0 +1,631 @@
+{
+  "settings": {
+    "components": {
+      "code": true,
+      "binaries": false
+    },
+    "targetId": "net10.0",
+    "targetDisplayName": ".NETCoreApp,Version=v10.0"
+  },
+  "analysisStartTime": "2026-08-24T06:47:45.3425987Z",
+  "analysisEndTime": "2026-08-24T06:47:46.4278069Z",
+  "privacyModeHelpUrl": "https://go.microsoft.com/fwlink/?linkid=2270980",
+  "stats": {
+    "summary": {
+      "projects": 1,
+      "issues": 3,
+      "incidents": 20,
+      "effort": 20
+    },
+    "charts": {
+      "severity": {
+        "Mandatory": 1,
+        "Optional": 0,
+        "Potential": 19,
+        "Information": 0
+      },
+      "category": {
+        "Project": 1,
+        "Api": 19
+      }
+    }
+  },
+  "projects": [
+    {
+      "path": "MarkdownWin\\MarkdownWin.csproj",
+      "startingProject": true,
+      "issues": 3,
+      "storyPoints": 20,
+      "properties": {
+        "appName": "MarkdownWin",
+        "projectKind": "WinForms",
+        "frameworks": [
+          "net8.0-windows10.0.19041.0"
+        ],
+        "languages": [
+          "C#"
+        ],
+        "tools": [
+          "MSBuild"
+        ],
+        "isSdkStyle": true,
+        "numberOfFiles": 22,
+        "numberOfCodeFiles": 7,
+        "linesTotal": 42904,
+        "linesOfCode": 894,
+        "totalApiScanned": 1825,
+        "minLinesOfCodeToChange": 19,
+        "maxLinesOfCodeToChange": 19
+      },
+      "ruleInstances": [
+        {
+          "incidentId": "740ef83a-4cd2-495d-8cc5-dde1f524bf17",
+          "ruleId": "Project.0002",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "Current target framework: net8.0-windows10.0.19041.0\nRecommended target framework: net10.0-windows10.0.22000.0",
+              "protected": "Current target framework: net8.0-windows10.0.19041.0\nRecommended target framework: net10.0-windows10.0.22000.0"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\MarkdownWin.csproj",
+            "snippet": "Current target framework: net8.0-windows10.0.19041.0\nRecommended target framework: net10.0-windows10.0.22000.0",
+            "protectedSnippet": "Current target framework: net8.0-windows10.0.19041.0\nRecommended target framework: net10.0-windows10.0.22000.0",
+            "properties": {
+              "CurrentTargetFramework": "net8.0-windows10.0.19041.0",
+              "RecommendedTargetFramework": "net10.0-windows10.0.22000.0"
+            }
+          }
+        },
+        {
+          "incidentId": "d7075a17-2539-4690-acd8-5da0262fd81a",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "that.Source = (global::System.Uri)Value;",
+              "protected": "T:System.Uri"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\obj\\ARM64\\Debug\\net8.0-windows10.0.19041.0\\win-arm64\\XamlTypeInfo.g.cs",
+            "snippet": "that.Source = (global::System.Uri)Value;",
+            "protectedSnippet": "T:System.Uri",
+            "label": "T:System.Uri",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 618,
+            "column": 12
+          }
+        },
+        {
+          "incidentId": "efc00815-0526-479f-8ab2-5254dea0fd27",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "return that.Source;",
+              "protected": "T:System.Uri"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\obj\\ARM64\\Debug\\net8.0-windows10.0.19041.0\\win-arm64\\XamlTypeInfo.g.cs",
+            "snippet": "return that.Source;",
+            "protectedSnippet": "T:System.Uri",
+            "label": "T:System.Uri",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 613,
+            "column": 12
+          }
+        },
+        {
+          "incidentId": "4370837c-023f-4d1d-8f6b-75fa10665214",
+          "ruleId": "Api.0002",
+          "description": "API is available in package System.Runtime.WindowsRuntime, 4.7.0. Add package reference to System.Runtime.WindowsRuntime, 4.7.0",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "that.DefaultBackgroundColor = (global::Windows.UI.Color)Value;",
+              "protected": "T:Windows.UI.Color"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\obj\\ARM64\\Debug\\net8.0-windows10.0.19041.0\\win-arm64\\XamlTypeInfo.g.cs",
+            "snippet": "that.DefaultBackgroundColor = (global::Windows.UI.Color)Value;",
+            "protectedSnippet": "T:Windows.UI.Color",
+            "label": "T:Windows.UI.Color",
+            "properties": {
+              "PackageId": "System.Runtime.WindowsRuntime",
+              "PackageNewVersion": "4.7.0"
+            },
+            "line": 608,
+            "column": 12
+          }
+        },
+        {
+          "incidentId": "9ac2ee3d-3692-45aa-81a8-f18c85a17a99",
+          "ruleId": "Api.0002",
+          "description": "API is available in package System.Runtime.WindowsRuntime, 4.7.0. Add package reference to System.Runtime.WindowsRuntime, 4.7.0",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "return that.DefaultBackgroundColor;",
+              "protected": "T:Windows.UI.Color"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\obj\\ARM64\\Debug\\net8.0-windows10.0.19041.0\\win-arm64\\XamlTypeInfo.g.cs",
+            "snippet": "return that.DefaultBackgroundColor;",
+            "protectedSnippet": "T:Windows.UI.Color",
+            "label": "T:Windows.UI.Color",
+            "properties": {
+              "PackageId": "System.Runtime.WindowsRuntime",
+              "PackageNewVersion": "4.7.0"
+            },
+            "line": 603,
+            "column": 12
+          }
+        },
+        {
+          "incidentId": "540670a1-f53b-42cd-9997-772162e99f83",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "global::System.Uri resourceLocator = new global::System.Uri(\u0022ms-appx:///MarkdownWebView.xaml\u0022);",
+              "protected": "T:System.Uri"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\obj\\ARM64\\Debug\\net8.0-windows10.0.19041.0\\win-arm64\\MarkdownWebView.g.i.cs",
+            "snippet": "global::System.Uri resourceLocator = new global::System.Uri(\u0022ms-appx:///MarkdownWebView.xaml\u0022);",
+            "protectedSnippet": "T:System.Uri",
+            "label": "T:System.Uri",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 39,
+            "column": 12
+          }
+        },
+        {
+          "incidentId": "3f81004f-5aa6-44a5-a055-424002573a23",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "global::System.Uri resourceLocator = new global::System.Uri(\u0022ms-appx:///MarkdownWebView.xaml\u0022);",
+              "protected": "M:System.Uri.#ctor(System.String)"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\obj\\ARM64\\Debug\\net8.0-windows10.0.19041.0\\win-arm64\\MarkdownWebView.g.i.cs",
+            "snippet": "global::System.Uri resourceLocator = new global::System.Uri(\u0022ms-appx:///MarkdownWebView.xaml\u0022);",
+            "protectedSnippet": "M:System.Uri.#ctor(System.String)",
+            "label": "M:System.Uri.#ctor(System.String)",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 39,
+            "column": 12
+          }
+        },
+        {
+          "incidentId": "68494151-fe6a-472e-b465-43cde32e6612",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "if (Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri))\n        {\n            _ = Launcher.LaunchUriAsync(uri);\n        }",
+              "protected": "T:System.Uri"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\MarkdownWebView.xaml.cs",
+            "snippet": "if (Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri))\n        {\n            _ = Launcher.LaunchUriAsync(uri);\n        }",
+            "protectedSnippet": "T:System.Uri",
+            "label": "T:System.Uri",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 252,
+            "column": 8
+          }
+        },
+        {
+          "incidentId": "7e1038e2-71e7-4e82-a859-0875141e1b04",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "if (Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri))\n        {\n            _ = Launcher.LaunchUriAsync(uri);\n        }",
+              "protected": "M:System.Uri.TryCreate(System.String,System.UriKind,System.Uri@)"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\MarkdownWebView.xaml.cs",
+            "snippet": "if (Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri))\n        {\n            _ = Launcher.LaunchUriAsync(uri);\n        }",
+            "protectedSnippet": "M:System.Uri.TryCreate(System.String,System.UriKind,System.Uri@)",
+            "label": "M:System.Uri.TryCreate(System.String,System.UriKind,System.Uri@)",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 252,
+            "column": 8
+          }
+        },
+        {
+          "incidentId": "c5622c8c-c0d2-4dbf-94e4-3a7199b6d70e",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri) || uri.Host == Host)\n        {\n            return;\n        }",
+              "protected": "T:System.Uri"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\MarkdownWebView.xaml.cs",
+            "snippet": "if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri) || uri.Host == Host)\n        {\n            return;\n        }",
+            "protectedSnippet": "T:System.Uri",
+            "label": "T:System.Uri",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 240,
+            "column": 8
+          }
+        },
+        {
+          "incidentId": "471cbaa4-acf9-4e55-b55e-8df903962822",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri) || uri.Host == Host)\n        {\n            return;\n        }",
+              "protected": "M:System.Uri.TryCreate(System.String,System.UriKind,System.Uri@)"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\MarkdownWebView.xaml.cs",
+            "snippet": "if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri) || uri.Host == Host)\n        {\n            return;\n        }",
+            "protectedSnippet": "M:System.Uri.TryCreate(System.String,System.UriKind,System.Uri@)",
+            "label": "M:System.Uri.TryCreate(System.String,System.UriKind,System.Uri@)",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 240,
+            "column": 8
+          }
+        },
+        {
+          "incidentId": "8e77c552-3703-4e6f-8387-69a2501c71f1",
+          "ruleId": "Api.0002",
+          "description": "API is available in package System.Runtime.WindowsRuntime, 4.7.0. Add package reference to System.Runtime.WindowsRuntime, 4.7.0",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "IRandomAccessStream stream = new MemoryStream(asset.Data).AsRandomAccessStream();",
+              "protected": "T:System.IO.WindowsRuntimeStreamExtensions"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\MarkdownWebView.xaml.cs",
+            "snippet": "IRandomAccessStream stream = new MemoryStream(asset.Data).AsRandomAccessStream();",
+            "protectedSnippet": "T:System.IO.WindowsRuntimeStreamExtensions",
+            "label": "T:System.IO.WindowsRuntimeStreamExtensions",
+            "properties": {
+              "PackageId": "System.Runtime.WindowsRuntime",
+              "PackageNewVersion": "4.7.0"
+            },
+            "line": 151,
+            "column": 8
+          }
+        },
+        {
+          "incidentId": "9df1ea33-6659-477f-bc2d-430d42fa044b",
+          "ruleId": "Api.0002",
+          "description": "API is available in package System.Runtime.WindowsRuntime, 4.7.0. Add package reference to System.Runtime.WindowsRuntime, 4.7.0",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "IRandomAccessStream stream = new MemoryStream(asset.Data).AsRandomAccessStream();",
+              "protected": "M:System.IO.WindowsRuntimeStreamExtensions.AsRandomAccessStream(System.IO.Stream)"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\MarkdownWebView.xaml.cs",
+            "snippet": "IRandomAccessStream stream = new MemoryStream(asset.Data).AsRandomAccessStream();",
+            "protectedSnippet": "M:System.IO.WindowsRuntimeStreamExtensions.AsRandomAccessStream(System.IO.Stream)",
+            "label": "M:System.IO.WindowsRuntimeStreamExtensions.AsRandomAccessStream(System.IO.Stream)",
+            "properties": {
+              "PackageId": "System.Runtime.WindowsRuntime",
+              "PackageNewVersion": "4.7.0"
+            },
+            "line": 151,
+            "column": 8
+          }
+        },
+        {
+          "incidentId": "98f33e18-cab7-46df-9a24-b5f93d6ff5b3",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "string path = new Uri(args.Request.Uri).AbsolutePath;",
+              "protected": "T:System.Uri"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\MarkdownWebView.xaml.cs",
+            "snippet": "string path = new Uri(args.Request.Uri).AbsolutePath;",
+            "protectedSnippet": "T:System.Uri",
+            "label": "T:System.Uri",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 142,
+            "column": 8
+          }
+        },
+        {
+          "incidentId": "9e835173-bfc0-4067-bed4-91746278ca98",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "string path = new Uri(args.Request.Uri).AbsolutePath;",
+              "protected": "M:System.Uri.#ctor(System.String)"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\MarkdownWebView.xaml.cs",
+            "snippet": "string path = new Uri(args.Request.Uri).AbsolutePath;",
+            "protectedSnippet": "M:System.Uri.#ctor(System.String)",
+            "label": "M:System.Uri.#ctor(System.String)",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 142,
+            "column": 8
+          }
+        },
+        {
+          "incidentId": "a5167820-660c-49ef-901c-95ea2ec04233",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "string path = new Uri(args.Request.Uri).AbsolutePath;",
+              "protected": "P:System.Uri.AbsolutePath"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\MarkdownWebView.xaml.cs",
+            "snippet": "string path = new Uri(args.Request.Uri).AbsolutePath;",
+            "protectedSnippet": "P:System.Uri.AbsolutePath",
+            "label": "P:System.Uri.AbsolutePath",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 142,
+            "column": 8
+          }
+        },
+        {
+          "incidentId": "169b0ce9-e05e-40ac-ab79-dc35d04efead",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "global::System.Uri resourceLocator = new global::System.Uri(\u0022ms-appx:///App.xaml\u0022);",
+              "protected": "T:System.Uri"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\obj\\ARM64\\Debug\\net8.0-windows10.0.19041.0\\win-arm64\\App.g.i.cs",
+            "snippet": "global::System.Uri resourceLocator = new global::System.Uri(\u0022ms-appx:///App.xaml\u0022);",
+            "protectedSnippet": "T:System.Uri",
+            "label": "T:System.Uri",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 72,
+            "column": 12
+          }
+        },
+        {
+          "incidentId": "d31e866c-1456-4b99-b078-9037c812b8dd",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "global::System.Uri resourceLocator = new global::System.Uri(\u0022ms-appx:///App.xaml\u0022);",
+              "protected": "M:System.Uri.#ctor(System.String)"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\obj\\ARM64\\Debug\\net8.0-windows10.0.19041.0\\win-arm64\\App.g.i.cs",
+            "snippet": "global::System.Uri resourceLocator = new global::System.Uri(\u0022ms-appx:///App.xaml\u0022);",
+            "protectedSnippet": "M:System.Uri.#ctor(System.String)",
+            "label": "M:System.Uri.#ctor(System.String)",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 72,
+            "column": 12
+          }
+        },
+        {
+          "incidentId": "998c0968-7297-4e8d-8f50-c5fdeb75c6f0",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "global::System.Uri resourceLocator = new global::System.Uri(\u0022ms-appx:///MainWindow.xaml\u0022);",
+              "protected": "T:System.Uri"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\obj\\ARM64\\Debug\\net8.0-windows10.0.19041.0\\win-arm64\\MainWindow.g.i.cs",
+            "snippet": "global::System.Uri resourceLocator = new global::System.Uri(\u0022ms-appx:///MainWindow.xaml\u0022);",
+            "protectedSnippet": "T:System.Uri",
+            "label": "T:System.Uri",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 39,
+            "column": 12
+          }
+        },
+        {
+          "incidentId": "147b9abf-ca4f-40a6-9248-690f28b27de0",
+          "ruleId": "Api.0003",
+          "description": "Breaking change: URI length limits removed ",
+          "projectPath": "MarkdownWin\\MarkdownWin.csproj",
+          "state": "Active",
+          "location": {
+            "snippetModel": {
+              "unrestricted": "global::System.Uri resourceLocator = new global::System.Uri(\u0022ms-appx:///MainWindow.xaml\u0022);",
+              "protected": "M:System.Uri.#ctor(System.String)"
+            },
+            "kind": "File",
+            "path": "MarkdownWin\\obj\\ARM64\\Debug\\net8.0-windows10.0.19041.0\\win-arm64\\MainWindow.g.i.cs",
+            "snippet": "global::System.Uri resourceLocator = new global::System.Uri(\u0022ms-appx:///MainWindow.xaml\u0022);",
+            "protectedSnippet": "M:System.Uri.#ctor(System.String)",
+            "label": "M:System.Uri.#ctor(System.String)",
+            "links": [
+              {
+                "title": "API documentation",
+                "url": "https://github.com/dotnet/docs/blob/main/docs/core/compatibility/networking/10.0/uri-length-limits-removed.md",
+                "isCustom": false
+              }
+            ],
+            "line": 39,
+            "column": 12
+          }
+        }
+      ],
+      "features": []
+    }
+  ],
+  "rules": {
+    "Project.0002": {
+      "id": "Project.0002",
+      "isFeature": false,
+      "description": "Project\u0027s target framework(s) needs to be changed to the new target framework that you selected for this upgrade.\n\nDuring upgrade target framework will be adjusted to corresponding platform when applicable. In some cases project would result in multiple target frameworks after the upgrade if it was using features that now have their own platforms in modern .NET frameworks (windows, iOS, Android etc).",
+      "label": "Project\u0027s target framework(s) needs to be changed",
+      "severity": "Mandatory",
+      "effort": 1,
+      "links": [
+        {
+          "title": "Overview of porting from .NET Framework to .NET",
+          "url": "https://go.microsoft.com/fwlink/?linkid=2265227",
+          "isCustom": false
+        },
+        {
+          "title": ".NET project SDKs",
+          "url": "https://go.microsoft.com/fwlink/?linkid=2265226",
+          "isCustom": false
+        }
+      ]
+    },
+    "Api.0003": {
+      "id": "Api.0003",
+      "isFeature": false,
+      "description": "API has a behavioral change in selected .NET version: code and binaries may behave differently at runtime without needing recompilation, but the new behavior might be undesirable and require updates.",
+      "label": "Behavioral change in selected .NET version",
+      "severity": "Potential",
+      "effort": 1
+    },
+    "Api.0002": {
+      "id": "Api.0002",
+      "isFeature": false,
+      "description": "API is source incompatible for selected .NET version: requires code changes to compile successfully when targeting a new version, such as removing obsolete APIs or changing method signatures.",
+      "label": "Source incompatible for selected .NET version",
+      "severity": "Potential",
+      "effort": 1,
+      "links": [
+        {
+          "title": "Breaking changes in .NET",
+          "url": "https://go.microsoft.com/fwlink/?linkid=2262679",
+          "isCustom": false
+        }
+      ]
+    }
+  }
+}

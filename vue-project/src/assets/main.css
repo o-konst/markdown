@@ -1,0 +1,23 @@
+@import './base.css';
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  /* The web view is the whole pane: no page chrome, no scroll bounce. */
+  overscroll-behavior: none;
+}
+
+a {
+  color: hsla(160, 100%, 37%, 1);
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  a:hover {
+    text-decoration: underline;
+  }
+}

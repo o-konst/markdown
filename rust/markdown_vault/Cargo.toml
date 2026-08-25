@@ -1,0 +1,15 @@
+[package]
+name = "markdown_vault"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Vault storage, history, and search shared by the app, the MCP server, and the agent"
+
+[dependencies]
+git2 = { version = "0.21.0", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+unicode-normalization = "0.1.25"
+
+[dev-dependencies]
+tempfile = "3"

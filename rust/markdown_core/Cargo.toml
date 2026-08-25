@@ -1,0 +1,21 @@
+[package]
+name = "markdown_core"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Markdown rendering backend with the Vue web UI compiled into the library"
+
+[lib]
+name = "markdown_core"
+# staticlib: linked into the macOS app. cdylib: loaded by the Windows (WinUI) app.
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+ammonia = "4.1.4"
+markdown_agent = { version = "0.1.0", path = "../markdown_agent" }
+markdown_vault = { version = "0.1.0", path = "../markdown_vault" }
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+serde_json = "1.0.151"
+
+[dev-dependencies]
+tempfile = "3.27.0"

@@ -1,0 +1,128 @@
+# Build and development guide
+
+This repo is **not a git repository** (no `.git` at the root as of this writing) — keep
+that in mind before assuming `git log`/`git blame`/branch-based workflows apply at the
+top level. (`markdown_vault` does create its own `.git` *inside* whatever notes folder a
+user opens as a vault — that's a separate, intentional, per-vault repo; see
+`security.md` §5.)
+
+## Rust workspace (`rust/`)
+
+```sh
+cd rust
+cargo test                             # ~143 tests across markdown_core/vault/agent, all network-free
+MARKDOWN_SKIP_UI_BUILD=1 cargo build   # skip rebuilding vue-project/dist, reuse what's there
+```
+
+- `markdown_core` is `["staticlib", "cdylib", "rlib"]` — building it produces both a `.a`
+  (macOS/iOS) and a `.dll`/`.so` (Windows/Linux) from the same source.
+- Without `MARKDOWN_SKIP_UI_BUILD=1`, `markdown_core`'s `build.rs` runs `bun install
+  --frozen-lockfile` (falling back to `npm install`) then `bun run build-only` /
+  `npm run build-only` against `../../vue-project`, and embeds the resulting `dist/` as
+  `include_bytes!` data. This means **a plain `cargo build` requires Node/bun tooling to
+  be available** unless you set the skip flag.
+- The vendored MCP server builds separately:
+  `cargo build --manifest-path vendor/solomd-mcp/Cargo.toml`.
+
+## macOS (`macos/Markdown/`)
+
+Open `Markdown.xcodeproj` in Xcode, or build from the command line. Building the app
+target triggers a Run Script build phase that calls `rust/build-xcode.sh`, which:
+
+1. Maps Xcode's `ARCHS`/`PLATFORM_NAME` to Rust targets (e.g. `aarch64-apple-darwin`,
+   `aarch64-apple-ios`), auto-installing missing `rustup` targets.
+2. Builds `markdown_core` per architecture and `lipo -create`s (or copies, if a single
+   slice) the result into `target/apple/$PLATFORM_NAME-$CONFIGURATION/libmarkdown_core.a`.
+3. Scrubs `CPATH`/`LIBRARY_PATH`/`RUSTFLAGS` from Xcode's environment before invoking
+   cargo (stale values break cross-arch builds) but **sets `SDKROOT` explicitly**, because
+   `git2`'s C dependencies (libgit2, zlib) need a sysroot to find headers like
+   `<sys/types.h>`.
+4. **On `PLATFORM_NAME=macosx` only**, also builds the vendored `solomd-mcp` binary
+   per-arch, lipos it, and copies it into `$BUILT_PRODUCTS_DIR/$EXECUTABLE_FOLDER_PATH`
+   (i.e. `Contents/MacOS/`, **not** `Contents/Resources/` — macOS refuses to execute a
+   Mach-O placed in `Resources` inside a signed bundle, and fails with a **silent SIGKILL
+   and no diagnostic**). It then **explicitly re-signs** the binary with `codesign` using
+   Xcode's own signing identity, because cargo's ad-hoc "linker-signed" signature is
+   rejected by `taskgated` once nested inside an already-signed bundle — again a silent
+   SIGKILL with no error message. **This is a genuinely subtle, previously-debugged
+   failure mode** — if the MCP sidecar mysteriously stops launching after a build-script
+   change, check both of these (correct bundle subfolder, explicit re-signing) first.
+
+Requirements: `rustup`, `bun` (or `npm`) for the Vue build, Xcode with the relevant iOS/macOS
+SDKs. `ENABLE_USER_SCRIPT_SANDBOXING = NO` is set at the project level specifically
+because this run-script phase shells out to `cargo`/`bun`.
+
+Standalone/manual build of just the Rust slice:
+
+```sh
+cd rust
+./build-xcode.sh          # builds a Debug slice for the host machine
+```
+
+Testing: `cargo test` (from `rust/`) covers the Rust logic. There's no XCTest suite
+mentioned in the explored files — UI-level verification is manual (per the design plan's
+"Verification" section: temporary `NSLog` instrumentation against a fixture vault, a
+live-write smoke test with the app open while editing via an external tool).
+
+## Windows (`win/MarkdownWin/`)
+
+Open `MarkdownWin.slnx` in Visual Studio, or build via `dotnet build`/`msbuild`. A
+`BuildMarkdownCore` MSBuild target (`BeforeTargets="BeforeBuild"`) automatically shells
+out to `cargo build --target <triple>-pc-windows-msvc [--release]` in
+`rust/markdown_core`, mapping `$(Platform)` (`x64`/`x86`/`ARM64`) to the matching Rust
+target triple, then copies the resulting `markdown_core.dll` next to the app output.
+
+Notes:
+
+- `MARKDOWN_SKIP_UI_BUILD=1` is **always** set for the Windows build — the Vue frontend is
+  never built as part of the Windows pipeline (only macOS builds it, due to POSIX-symlink
+  issues in `node_modules` over this team's network share). This means **a Windows build
+  depends on `vue-project/dist` already existing** from a prior macOS build (checked in,
+  or copied over) — if `dist/` is missing or stale, the embedded UI will be stale or
+  absent, not rebuilt.
+- The `BuildMarkdownCore` target is `ContinueOnError="true"` — a missing Rust toolchain
+  produces a warning, not a build failure, so a broken/absent `markdown_core.dll` can
+  silently ship if you're not watching build warnings.
+- **Network-share workarounds baked into the `.csproj`**: `BaseOutputPath` is forced to
+  `%LOCALAPPDATA%\MarkdownWin\build\bin\` (MSIX registration fails from a network path —
+  `DEP0700`) and `CARGO_TARGET_DIR` is forced to `%LOCALAPPDATA%\MarkdownWin\rust-target`
+  (Cargo can't manage its temp archives on this team's `W:` network drive — `os error
+  87`). If you're developing from a local (non-network) checkout, these overrides are
+  harmless but were specifically added for network-share development — don't "simplify
+  them away" without checking whether teammates still need them.
+- Target framework is `net8.0-windows10.0.19041.0` (Windows App SDK 2.4.0). A `.NET 10`
+  upgrade has been *assessed* (`.github/upgrades/scenarios/dotnet-version-upgrade/`) but
+  **not applied** — don't assume the assessment reflects the current build target.
+
+## Vue frontend (`vue-project/`)
+
+```sh
+cd vue-project
+npm install       # or: bun install
+npm run dev       # Vite dev server — runs in 'standalone' fallback mode (no native bridge)
+npm run build     # type-check (vue-tsc) + build-only, produces dist/
+npm run build-only  # skip type-check — this is what markdown_core's build.rs actually runs
+npm run type-check  # vue-tsc --build, run separately/manually or in CI
+```
+
+Because the app has no mock bridge server, `npm run dev` only shows a static sample
+document rendered through the HTML-escaped fallback path — it cannot exercise real
+rendering, outline behavior, or preferences syncing outside a native host. To test real
+behavior, build the frontend and run it embedded in the macOS or Windows app.
+
+There is no automated test runner configured (no vitest/cypress) — frontend testing is
+currently manual, through the embedded app.
+
+## End-to-end verification checklist (from the design plan, still relevant)
+
+1. `cargo test` (workspace-wide) — Rust unit tests, ~143 tests, network-free.
+2. `npm run build` (or `bun run build`) in `vue-project/` — type-checks and builds the UI.
+3. `xcodebuild` (or an Xcode build) for the macOS app — exercises `build-xcode.sh` end to
+   end, including the vendored MCP server build/sign step.
+4. A live-write smoke test: edit a note from an external tool (e.g. Claude Code via the
+   bundled MCP server) while the macOS app has that vault open — the file tree and preview
+   should refresh, and any dirty buffer should be left untouched, never silently
+   overwritten.
+5. `npx @modelcontextprotocol/inspector` against the built `solomd-mcp` binary to exercise
+   every MCP tool/resource at the protocol level — this can't be verified from source
+   alone and should be run manually when touching the MCP surface.

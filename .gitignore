@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Xcode — user-specific state and derived build products, not shared source
+xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# .NET / Windows — per-configuration build output (win/MarkdownWin/**/bin, **/obj)
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio — local IDE cache and user-specific project settings
+.vs/
+*.user
+*.suo
+*.Backup.tmp
+
+# Secrets — nothing should ever hand-carry a key or token into a commit
+.env
+*.pem

@@ -1,0 +1,190 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>MarkdownWin</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <PublishProfile>win-$(Platform).pubxml</PublishProfile>
+    <UseWinUI>true</UseWinUI>
+    <WinUISDKReferences>false</WinUISDKReferences>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <Nullable>enable</Nullable>
+    <!-- The project lives on a network drive, and Windows cannot register an MSIX layout
+         from a network location (DEP0700 / 0x80073D1F), so the output stays local. -->
+    <BaseOutputPath>$(LOCALAPPDATA)\MarkdownWin\build\bin\</BaseOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Page Remove="MarkdownWebView.xaml" />
+    <Page Remove="SidebarView.xaml" />
+    <Page Remove="SettingsDialog.xaml" />
+    <Page Remove="LoginDialog.xaml" />
+    <Page Remove="ChatView.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\SplashScreen.scale-200.png" />
+    <Content Include="Assets\LockScreenLogo.scale-200.png" />
+    <Content Include="Assets\Square150x150Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
+    <Content Include="Assets\StoreLogo.png" />
+    <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Include="MarkdownWebView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Update="MarkdownWebView.xaml.cs">
+      <DependentUpon>MarkdownWebView.xaml</DependentUpon>
+    </Compile>
+    <Page Include="SidebarView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Update="SidebarView.xaml.cs">
+      <DependentUpon>SidebarView.xaml</DependentUpon>
+    </Compile>
+    <Page Include="SettingsDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Update="SettingsDialog.xaml.cs">
+      <DependentUpon>SettingsDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="LoginDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Update="LoginDialog.xaml.cs">
+      <DependentUpon>LoginDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="ChatView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Update="ChatView.xaml.cs">
+      <DependentUpon>ChatView.xaml</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <!--
+    Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
+    Tools extension to be activated for this project even if the Windows App SDK Nuget
+    package has not yet been restored.
+  -->
+  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="MarkdownWebView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="SidebarView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="SettingsDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="LoginDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+    <None Update="ChatView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </None>
+  </ItemGroup>
+
+  <!--
+    Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
+    Explorer "Package and Publish" context menu entry to be enabled for this project even if
+    the Windows App SDK Nuget package has not yet been restored.
+  -->
+  <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+  </PropertyGroup>
+
+  <!-- Publish Properties -->
+  <PropertyGroup>
+    <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
+    <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
+    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
+    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
+  </PropertyGroup>
+
+  <!--
+    The shared Rust core (which also carries the compiled Vue UI) is built as a cdylib and
+    copied next to the app, where the P/Invoke declarations in MarkdownCore.cs find it.
+  -->
+  <PropertyGroup>
+    <MarkdownCoreDir>$(MSBuildThisFileDirectory)..\..\..\rust\markdown_core</MarkdownCoreDir>
+    <MarkdownCoreProfile Condition="'$(Configuration)' == 'Debug'">debug</MarkdownCoreProfile>
+    <MarkdownCoreProfile Condition="'$(Configuration)' != 'Debug'">release</MarkdownCoreProfile>
+    <MarkdownCoreTarget Condition="'$(Platform)' == 'x64'">x86_64-pc-windows-msvc</MarkdownCoreTarget>
+    <MarkdownCoreTarget Condition="'$(Platform)' == 'x86'">i686-pc-windows-msvc</MarkdownCoreTarget>
+    <MarkdownCoreTarget Condition="'$(Platform)' == 'ARM64'">aarch64-pc-windows-msvc</MarkdownCoreTarget>
+    <MarkdownCoreReleaseFlag Condition="'$(Configuration)' != 'Debug'">--release</MarkdownCoreReleaseFlag>
+    <!-- Cargo cannot manage its temporary archives on the W: drive (os error 87), so it builds locally. -->
+    <MarkdownCoreTargetDir>$(LOCALAPPDATA)\MarkdownWin\rust-target</MarkdownCoreTargetDir>
+    <MarkdownCoreDll>$(MarkdownCoreTargetDir)\$(MarkdownCoreTarget)\$(MarkdownCoreProfile)\markdown_core.dll</MarkdownCoreDll>
+    <!-- ring's ARM64 build compiles C sources with clang, which (unlike cl.exe) needs INCLUDE/LIB
+         from a VS developer environment to find the Windows SDK/UCRT headers. -->
+    <MarkdownCoreVcArch Condition="'$(Platform)' == 'ARM64'">arm64</MarkdownCoreVcArch>
+    <MarkdownCoreBuildScript>$(MarkdownCoreTargetDir)\build-markdown-core.cmd</MarkdownCoreBuildScript>
+  </PropertyGroup>
+
+  <!--
+    Generates a small .cmd wrapper around the cargo invocation. When targeting ARM64 and
+    %INCLUDE% isn't already set (i.e. this isn't already running inside a VS Developer Command
+    Prompt), it locates the VS install via vswhere and sources vcvarsall itself first, so the
+    ARM64 build works from a plain terminal or a normally-launched Visual Studio session too,
+    not only a Developer Command Prompt.
+  -->
+  <Target Name="WriteMarkdownCoreBuildScript" BeforeTargets="BuildMarkdownCore">
+    <MakeDir Directories="$(MarkdownCoreTargetDir)" Condition="!Exists('$(MarkdownCoreTargetDir)')" />
+    <ItemGroup>
+      <_MarkdownCoreBuildScriptLines Include="@echo off" />
+      <_MarkdownCoreBuildScriptLines Condition="'$(MarkdownCoreVcArch)' != ''" Include="if not &quot;%25INCLUDE%25&quot;==&quot;&quot; goto :build" />
+      <_MarkdownCoreBuildScriptLines Condition="'$(MarkdownCoreVcArch)' != ''" Include="&quot;%25ProgramFiles(x86)%25\Microsoft Visual Studio\Installer\vswhere.exe&quot; -latest -prerelease -products %2a -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath &gt; &quot;%25~dp0vswhere-out.txt&quot; 2&gt;nul" />
+      <_MarkdownCoreBuildScriptLines Condition="'$(MarkdownCoreVcArch)' != ''" Include="set /p MARKDOWN_VS_PATH=&lt;&quot;%25~dp0vswhere-out.txt&quot;" />
+      <_MarkdownCoreBuildScriptLines Condition="'$(MarkdownCoreVcArch)' != ''" Include="if &quot;%25MARKDOWN_VS_PATH%25&quot;==&quot;&quot; goto :build" />
+      <_MarkdownCoreBuildScriptLines Condition="'$(MarkdownCoreVcArch)' != ''" Include="call &quot;%25MARKDOWN_VS_PATH%25\VC\Auxiliary\Build\vcvarsall.bat&quot; $(MarkdownCoreVcArch) &gt;nul" />
+      <_MarkdownCoreBuildScriptLines Condition="'$(MarkdownCoreVcArch)' != ''" Include=":build" />
+      <_MarkdownCoreBuildScriptLines Include="if exist &quot;C:\Program Files\LLVM\bin\clang.exe&quot; set &quot;PATH=%25PATH%25%3bC:\Program Files\LLVM\bin&quot;" />
+      <_MarkdownCoreBuildScriptLines Include="set &quot;PATH=%25PATH%25%3b%25USERPROFILE%25\.cargo\bin&quot;" />
+      <_MarkdownCoreBuildScriptLines Include="cargo build --target $(MarkdownCoreTarget) $(MarkdownCoreReleaseFlag)" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(MarkdownCoreBuildScript)" Lines="@(_MarkdownCoreBuildScriptLines)" Overwrite="true" />
+  </Target>
+
+  <Target Name="BuildMarkdownCore" BeforeTargets="BeforeBuild">
+    <!-- The Vue UI is built on macOS: its node_modules holds POSIX symlinks that npm cannot
+         handle over the SMB share, so Windows reuses the existing vue-project/dist. -->
+    <Exec Command="call &quot;$(MarkdownCoreBuildScript)&quot;" WorkingDirectory="$(MarkdownCoreDir)" EnvironmentVariables="CARGO_TARGET_DIR=$(MarkdownCoreTargetDir);MARKDOWN_SKIP_UI_BUILD=1" ContinueOnError="true">
+      <Output TaskParameter="ExitCode" PropertyName="MarkdownCoreExitCode" />
+    </Exec>
+    <Warning Condition="'$(MarkdownCoreExitCode)' != '0'" Text="Could not build the Rust core (markdown_core) for the $(MarkdownCoreProfile) profile. Install the Rust toolchain and the $(MarkdownCoreTarget) target; until then the app keeps whatever markdown_core.dll was built last, which may be stale, or disables the preview when there is none." />
+  </Target>
+
+  <Target Name="CopyMarkdownCore" AfterTargets="Build" Condition="Exists('$(MarkdownCoreDll)')">
+    <Copy SourceFiles="$(MarkdownCoreDll)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <ItemGroup>
+    <Content Include="$(MarkdownCoreDll)" Condition="Exists('$(MarkdownCoreDll)')">
+      <Link>markdown_core.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+</Project>

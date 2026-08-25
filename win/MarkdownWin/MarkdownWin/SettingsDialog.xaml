@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="MarkdownWin.SettingsDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Settings"
+    CloseButtonText="Done"
+    DefaultButton="Close">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="480">
+        <StackPanel Width="360" Spacing="20">
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="Assistant" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <PasswordBox x:Name="ApiKeyBox" PlaceholderText="Anthropic API key" PasswordChanged="OnApiKeyChanged" />
+                <TextBlock x:Name="ApiKeyStatus" Style="{StaticResource CaptionTextBlockStyle}" Opacity="0.7" Visibility="Collapsed" TextWrapping="Wrap" />
+                <HyperlinkButton Content="Get an API key from console.anthropic.com" NavigateUri="https://console.anthropic.com/settings/keys" Padding="0" />
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="Contents" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <ToggleSwitch x:Name="OutlineToggle" Header="Show contents tree" Toggled="OnOutlineToggled" />
+                <TextBlock
+                    x:Name="OutlineCaption"
+                    Text="The open document has no sections to navigate."
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Opacity="0.7"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="Appearance" Style="{StaticResource BodyStrongTextBlockStyle}" />
+
+                <RadioButtons x:Name="ThemeRadioButtons" Header="Theme" MaxColumns="3" SelectionChanged="OnThemeChanged">
+                    <x:String>Auto</x:String>
+                    <x:String>Light</x:String>
+                    <x:String>Dark</x:String>
+                </RadioButtons>
+
+                <RadioButtons x:Name="WidthRadioButtons" Header="Width" MaxColumns="2" SelectionChanged="OnWidthChanged">
+                    <x:String>Full width</x:String>
+                    <x:String>Page width</x:String>
+                </RadioButtons>
+
+                <NumberBox
+                    x:Name="FontSizeBox"
+                    Header="Font size"
+                    Minimum="11"
+                    Maximum="24"
+                    SmallChange="1"
+                    SpinButtonPlacementMode="Inline"
+                    ValueChanged="OnFontSizeChanged" />
+
+                <Button x:Name="ResetButton" Content="Reset to defaults" Click="OnResetClick" />
+            </StackPanel>
+
+        </StackPanel>
+    </ScrollViewer>
+</ContentDialog>

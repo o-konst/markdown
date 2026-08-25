@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="MarkdownWin.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MarkdownWin"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="MarkdownWin">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid RowSpacing="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <CommandBar Grid.Row="0" DefaultLabelPosition="Right" Background="Transparent">
+            <CommandBar.Content>
+                <AutoSuggestBox
+                    x:Name="SearchBox"
+                    Margin="12,0"
+                    MinWidth="220"
+                    MaxWidth="360"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    PlaceholderText="Search names and contents"
+                    QueryIcon="Find"
+                    TextChanged="OnSearchTextChanged" />
+            </CommandBar.Content>
+            <AppBarButton Icon="Folder" Label="Open Folder…" Click="OnOpenFolderClick">
+                <AppBarButton.KeyboardAccelerators>
+                    <KeyboardAccelerator Modifiers="Control,Shift" Key="O" />
+                </AppBarButton.KeyboardAccelerators>
+            </AppBarButton>
+            <AppBarButton x:Name="CloseFolderButton" Icon="ClosePane" Label="Close Folder" Click="OnCloseFolderClick" IsEnabled="False" />
+            <AppBarSeparator />
+            <AppBarToggleButton x:Name="EditToggle" Icon="Edit" Label="Edit" Checked="OnEditToggleChanged" Unchecked="OnEditToggleChanged" ToolTipService.ToolTip="Edit the Markdown source">
+                <AppBarToggleButton.KeyboardAccelerators>
+                    <KeyboardAccelerator Modifiers="Control" Key="E" />
+                </AppBarToggleButton.KeyboardAccelerators>
+            </AppBarToggleButton>
+        </CommandBar>
+
+        <Grid x:Name="ContentGrid" Grid.Row="1" MinHeight="360">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SidebarColumn" Width="260" MinWidth="200" MaxWidth="420" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" MinWidth="240" />
+            </Grid.ColumnDefinitions>
+
+            <local:SidebarView x:Name="Sidebar" Grid.Column="0" />
+
+            <Border
+                Grid.Column="1"
+                Width="4"
+                Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                ManipulationMode="TranslateX"
+                PointerPressed="OnDividerPointerPressed"
+                PointerMoved="OnDividerPointerMoved"
+                PointerReleased="OnDividerPointerReleased" />
+
+            <Grid Grid.Column="2" Margin="0,0,12,12">
+                <local:MarkdownWebView x:Name="Preview" />
+                <TextBox
+                    x:Name="EditorOverlay"
+                    AcceptsReturn="True"
+                    TextWrapping="Wrap"
+                    FontFamily="Cascadia Mono, Consolas"
+                    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+                    ScrollViewer.VerticalScrollBarVisibility="Auto"
+                    Visibility="Collapsed"
+                    TextChanged="OnEditorTextChanged" />
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

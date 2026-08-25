@@ -1,0 +1,12 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd /Users/konstantin/Dev/Projects/Playground/markdown/macos/Markdown && python3 - <<'PY'\nimport pathlib\np = pathlib\\.Path\\(\"Markdown\\.xcodeproj/project\\.pbxproj\"\\)\ns = p\\.read_text\\(\\)\nanchor = \"\\\\t\\\\t\\\\t\\\\tENABLE_HARDENED_RUNTIME = YES;\\\\n\"\nassert s\\.count\\(anchor\\) == 2\ns = s\\.replace\\(anchor, anchor \\+ \"\\\\t\\\\t\\\\t\\\\tENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;\\\\n\"\\)\np\\.write_text\\(s\\)\nprint\\(\"patched\"\\)\nPY\nplutil -lint Markdown\\.xcodeproj/project\\.pbxproj$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^pgrep -f \"Markdown\\.app/Contents/MacOS/Markdown\" \\| head -3$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = ["markdown_core", "markdown_vault", "markdown_agent", "vendor/solomd-mcp"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "debuginfo"
