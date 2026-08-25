@@ -1,0 +1,88 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`markdown round-trip fidelity > footnotes.md: first-pass serialization matches its snapshot 1`] = `
+"Here is a claim with a footnote reference.[^simple]
+
+A paragraph referencing a multi-paragraph note.[^multi]
+
+
+| Column | Notes                     |
+| ------ | ------------------------- |
+| Value  | See table note.[^intable] |
+
+
+- List item with a note.[^inlist]
+- Second item
+
+[^simple]: A simple one-line footnote.
+
+[^multi]: First paragraph of the footnote.
+
+    Second paragraph, indented by four spaces.
+
+[^intable]: A footnote referenced from inside a table cell.
+
+[^inlist]: A footnote referenced from inside a list item."
+`;
+
+exports[`markdown round-trip fidelity > full-document.md: first-pass serialization matches its snapshot 1`] = `
+"# Full Document Fixture {#full-doc}
+
+## Task List
+
+- [ ] Unchecked task
+- [x] Checked task
+
+## Nested Lists
+
+1. First
+  1. Nested first
+    1. Deeply nested
+2. Second
+
+- Bullet one
+- Bullet two
+
+## Table With Alignment
+
+
+| Left         | Center | Right |
+| :------------ | :------: | -----: |
+| a            | b      | c     |
+| longer value | x      | y     |
+
+
+## Code
+
+\`\`\`js
+function greet(name) {
+  return \`Hello, \${name}!\`
+}
+\`\`\`
+
+A fence containing a backtick run:
+
+\`\`\`\`text
+This fence uses four backticks so a run of three can appear inside: \`\`\` still literal.
+\`\`\`\`
+
+## Footnote In Context {#footnote-heading}
+
+This paragraph cites a note.[^ctx]
+
+[^ctx]: Context footnote defined near the end of the mixed document."
+`;
+
+exports[`markdown round-trip fidelity > headings.md: first-pass serialization matches its snapshot 1`] = `
+"# Plain Heading
+
+## Heading With Explicit Id {#custom-anchor}
+
+### Heading, Duplicate {#dup}
+
+### Heading, Duplicate {#dup}
+
+#### Heading with *emphasis* and \`inline code\` {#mixed-inline}
+
+##### Heading with no explicit id and *emphasis*"
+`;

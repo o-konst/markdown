@@ -35,11 +35,25 @@ struct MarkdownWebView {
     /// Called when the web UI reports whether the document has an outline at all.
     var onOutlineAvailabilityChange: (Bool) -> Void
 
+    /// Called when the WYSIWYG editor reports an edit, so it flows into `Workspace.text`
+    /// and through the existing autosave/vault-write path unchanged. See the
+    /// echo-suppression note on `userContentController(_:didReceive:replyHandler:)` below
+    /// for why this must not simply re-push the same text back into the web view.
+    var onDocumentEdit: (String) -> Void
+
+    /// Called on every update with a closure that flushes the WYSIWYG editor's pending edit
+    /// (see `WebPreviewCoordinator.flushPendingEdit()`). `Workspace` has no reference to this
+    /// coordinator — or to `WKWebView`/SwiftUI at all — so this is how it gets one, matching
+    /// `Workspace`'s existing style of taking dependencies (vault, watcher) as plain closures
+    /// rather than concrete UI-framework types.
+    var registerFlushPendingEdit: (@escaping () async -> String?) -> Void
+
     func makeCoordinator() -> WebPreviewCoordinator {
         WebPreviewCoordinator(
             text: text,
             preferences: preferences,
-            onOutlineAvailabilityChange: onOutlineAvailabilityChange
+            onOutlineAvailabilityChange: onOutlineAvailabilityChange,
+            onDocumentEdit: onDocumentEdit
         )
     }
 }
@@ -53,8 +67,12 @@ extension MarkdownWebView: NSViewRepresentable {
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         context.coordinator.onOutlineAvailabilityChange = onOutlineAvailabilityChange
+        context.coordinator.onDocumentEdit = onDocumentEdit
         context.coordinator.setDocumentText(text)
         context.coordinator.setPreferences(preferences)
+        registerFlushPendingEdit { [coordinator = context.coordinator] in
+            await coordinator.flushPendingEdit()
+        }
     }
 }
 
@@ -67,8 +85,12 @@ extension MarkdownWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.onOutlineAvailabilityChange = onOutlineAvailabilityChange
+        context.coordinator.onDocumentEdit = onDocumentEdit
         context.coordinator.setDocumentText(text)
         context.coordinator.setPreferences(preferences)
+        registerFlushPendingEdit { [coordinator = context.coordinator] in
+            await coordinator.flushPendingEdit()
+        }
     }
 }
 
@@ -81,17 +103,20 @@ final class WebPreviewCoordinator: NSObject {
     private var text: String
     private var preferences: WebPreferences
     var onOutlineAvailabilityChange: (Bool) -> Void
+    var onDocumentEdit: (String) -> Void
     private var isLoaded = false
     private weak var webView: WKWebView?
 
     init(
         text: String,
         preferences: WebPreferences,
-        onOutlineAvailabilityChange: @escaping (Bool) -> Void
+        onOutlineAvailabilityChange: @escaping (Bool) -> Void,
+        onDocumentEdit: @escaping (String) -> Void
     ) {
         self.text = text
         self.preferences = preferences
         self.onOutlineAvailabilityChange = onOutlineAvailabilityChange
+        self.onDocumentEdit = onDocumentEdit
     }
 
     func makeWebView() -> WKWebView {
@@ -152,6 +177,38 @@ final class WebPreviewCoordinator: NSObject {
         ) { result in
             if case .failure(let error) = result {
                 NSLog("Markdown: failed to push document into the web view: \(error)")
+            }
+        }
+    }
+
+    /// Asks the WYSIWYG editor to report its current text immediately, cancelling any
+    /// pending debounce — the opposite direction of `documentEdit`, native calling into
+    /// JS. Wired into every `Workspace` flush point (`flushPendingSaveAsync`) so switching
+    /// files can't silently drop trailing keystrokes still sitting in the editor's own
+    /// debounce.
+    ///
+    /// `callAsyncJavaScript` has no `async throws`-returning overload in this SDK — its
+    /// only form is completion-handler-based (`(Result<Any, Error>) -> Void`), same as
+    /// `pushDocument()`/`pushPreferences()` above. An earlier version of this method wrote
+    /// `try await webView.callAsyncJavaScript(...)` directly, which compiled but silently
+    /// resolved to a *different*, `Void`-returning overload — caught by the build's own
+    /// warnings (`result` inferred as `()`, "cast from `()` to `String` always fails"),
+    /// not by any runtime symptom. Bridged through `withCheckedContinuation` instead.
+    func flushPendingEdit() async -> String? {
+        guard isLoaded, let webView else { return nil }
+        return await withCheckedContinuation { continuation in
+            webView.callAsyncJavaScript(
+                "return await window.__markdownHost?.flushPendingEdit?.();",
+                in: nil,
+                in: .page
+            ) { result in
+                switch result {
+                case .success(let value):
+                    continuation.resume(returning: value as? String)
+                case .failure(let error):
+                    NSLog("Markdown: failed to flush the WYSIWYG editor's pending edit: \(error)")
+                    continuation.resume(returning: nil)
+                }
             }
         }
     }
@@ -233,6 +290,21 @@ extension WebPreviewCoordinator: WKScriptMessageHandlerWithReply {
                 return
             }
             onOutlineAvailabilityChange(available)
+            replyHandler(nil, nil)
+
+        case "documentEdit":
+            guard let newText = body["text"] as? String else {
+                replyHandler(nil, "`documentEdit` requires a `text` string")
+                return
+            }
+            // Echo suppression: `setDocumentText`'s `guard newText != text else { return }`
+            // is what stops this edit from being pushed straight back down into the web
+            // view and clobbering the WYSIWYG editor's cursor/selection — but only if
+            // `text` already matches by the time SwiftUI's next update pass calls
+            // `setDocumentText(workspace.text)`. Setting it here, before calling
+            // `onDocumentEdit`, is what makes that true. Do not reorder these two lines.
+            text = newText
+            onDocumentEdit(newText)
             replyHandler(nil, nil)
 
         default:

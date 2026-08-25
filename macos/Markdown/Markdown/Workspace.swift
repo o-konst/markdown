@@ -22,15 +22,22 @@ final class Workspace {
 
     private(set) var root: FileNode?
 
-    /// The file the editor is showing. Setting it reads that file from disk.
-    var selectedFile: URL? {
-        didSet {
-            guard selectedFile != oldValue else { return }
-            // `text` still holds the previous file's contents here, so flush before loading.
-            flushPendingSave(to: oldValue)
-            loadSelectedFile()
-        }
-    }
+    /// The file the editor is showing. Externally read-only — switch it with `selectFile(_:)`
+    /// (or via `open(folder:)`/`open(file:)`/`close()`), which flush the previous file first.
+    /// Not a plain stored property with `didSet` any more: flushing needs to await the
+    /// WYSIWYG editor's own pending edit first (see `flushEditorPendingEdit`), and property
+    /// observers can't be `async`.
+    private(set) var selectedFile: URL?
+
+    /// Set by the web view once its coordinator exists (see `MarkdownWebView`'s
+    /// `registerFlushPendingEdit`). Asks the WYSIWYG editor to report its current text
+    /// immediately, cancelling any pending debounce, before a flush reads `text` — otherwise
+    /// switching files faster than the editor's own debounce could write stale content,
+    /// silently dropping the last few keystrokes. `nil` before the web view has loaded, or in
+    /// a context with no web view at all (e.g. a future headless test); every flush point
+    /// below tolerates that by falling back to flushing `text` as it already stands, exactly
+    /// the prior behavior.
+    var flushEditorPendingEdit: (() async -> String?)?
 
     var text = Workspace.untitledText {
         didSet {
@@ -85,8 +92,8 @@ final class Workspace {
     /// no assistant for it, just direct reading and writing of that one file.
     var isSingleFile: Bool { root == nil && selectedFile != nil }
 
-    func open(folder url: URL) {
-        flushPendingSave(to: selectedFile)
+    func open(folder url: URL) async {
+        await flushPendingSaveAsync(to: selectedFile)
         watcher?.stop()
         watcher = nil
         vault = nil
@@ -121,13 +128,13 @@ final class Workspace {
     /// If `url` already lives inside the currently open folder, it is simply selected there
     /// instead, keeping the vault (and its history, search, and assistant) intact rather than
     /// discarding it for a file that already has all of that.
-    func open(file url: URL) {
+    func open(file url: URL) async {
         if let root, VaultStore.relativePath(of: url, in: root.url) != nil {
-            selectedFile = url
+            await performSelectFile(url)
             return
         }
 
-        flushPendingSave(to: selectedFile)
+        await flushPendingSaveAsync(to: selectedFile)
         watcher?.stop()
         watcher = nil
         vault = nil
@@ -141,11 +148,12 @@ final class Workspace {
 
         root = nil
         selectedFile = url
+        loadSelectedFile()
     }
 
     /// Closes whatever is open — a folder, or a single file — releasing its sandbox access.
-    func close() {
-        flushPendingSave(to: selectedFile)
+    func close() async {
+        await flushPendingSaveAsync(to: selectedFile)
         watcher?.stop()
         watcher = nil
         vault = nil
@@ -159,6 +167,23 @@ final class Workspace {
         selectedFile = nil
         errorMessage = nil
         text = Self.untitledText
+    }
+
+    /// Switches to a different file within the currently open folder — the counterpart to
+    /// `open(file:)`'s early-return branch, and the entry point for UI code (e.g. a `List`
+    /// selection `Binding`, which can't `await` directly) that just wants to change what's
+    /// shown. Flushes the previous file first, same as every other switch.
+    func selectFile(_ url: URL?) {
+        Task { @MainActor [weak self] in
+            await self?.performSelectFile(url)
+        }
+    }
+
+    private func performSelectFile(_ url: URL?) async {
+        guard url != selectedFile else { return }
+        await flushPendingSaveAsync(to: selectedFile)
+        selectedFile = url
+        loadSelectedFile()
     }
 
     /// Debounced so a burst of keystrokes only reads the folder once.
@@ -194,12 +219,12 @@ final class Workspace {
     /// vault, a Markdown file opens on its own. Anything else is reported, not silently
     /// ignored — a drop that visibly did nothing reads as a bug. Shared by every drop target
     /// in the app (the window body, the sidebar's toolbar) so they behave identically.
-    func open(dropped url: URL) {
+    func open(dropped url: URL) async {
         let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
         if isDirectory {
-            open(folder: url)
+            await open(folder: url)
         } else if MarkdownFile.matches(url) {
-            open(file: url)
+            await open(file: url)
         } else {
             reportOpenFailure(UnsupportedDropError())
         }
@@ -238,8 +263,8 @@ final class Workspace {
     // MARK: - Saving
 
     /// Writes the buffer now, if it has changes. Safe to call when there is nothing to do.
-    func save() {
-        flushPendingSave(to: selectedFile)
+    func save() async {
+        await flushPendingSaveAsync(to: selectedFile)
     }
 
     private func scheduleAutosave() {
@@ -253,6 +278,16 @@ final class Workspace {
             guard !Task.isCancelled else { return }
             self?.flushPendingSave(to: self?.selectedFile)
         }
+    }
+
+    /// Same as `flushPendingSave(to:)`, but first gives the WYSIWYG editor a chance to report
+    /// a debounced edit that has not reached `text` yet, so a fast switch cannot silently
+    /// drop the last few keystrokes. See `flushEditorPendingEdit`'s doc comment.
+    private func flushPendingSaveAsync(to url: URL?) async {
+        if let flush = flushEditorPendingEdit, let flushed = await flush(), flushed != text {
+            text = flushed
+        }
+        flushPendingSave(to: url)
     }
 
     /// Writes the current buffer to `url`, which may be a file we have just navigated away
