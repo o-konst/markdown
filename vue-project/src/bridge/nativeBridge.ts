@@ -68,6 +68,7 @@ type HostRequest =
   | { method: 'connect' }
   | { method: 'render'; markdown: string }
   | { method: 'outlineState'; available: boolean }
+  | { method: 'documentEdit'; text: string }
 
 /**
  * Methods the host calls on the web UI. Each is installed by its own subscriber, so all
@@ -162,6 +163,28 @@ export async function reportOutlineState(available: boolean): Promise<void> {
     await send({ method: 'outlineState', available })
   } catch {
     // Host predates the outline; it has no toggle to keep in sync.
+  }
+}
+
+/**
+ * Reports an edit made in the WYSIWYG editor back to the host, so it flows through the
+ * existing autosave/vault-write machinery (see the "Bridge" section of
+ * `.claude/docs/live-preview-editing-research.md`). No reply payload — an ack, like
+ * {@link reportOutlineState}. Hosts that predate WYSIWYG editing answer `Unknown bridge
+ * method`, which is expected rather than an error worth surfacing.
+ *
+ * Deliberately undebounced here: this function is a dumb transport, same as every other
+ * method in this file. Whatever calls it (see `useWysiwygDocument`) decides its own
+ * timing — including firing it un-debounced on the first keystroke of a typing burst, so
+ * the host's unsaved-changes flag flips before a slower, debounced steady-state report
+ * would otherwise leave a race window open against a concurrent external write.
+ */
+export async function reportEdit(text: string): Promise<void> {
+  if (!isNativeHost()) return
+  try {
+    await send({ method: 'documentEdit', text })
+  } catch {
+    // Host predates WYSIWYG editing; it has nothing to receive this into.
   }
 }
 
