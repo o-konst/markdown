@@ -14,7 +14,7 @@ defineProps<{
 
 <style scoped>
 .markdown-body {
-  line-height: 1.65;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
