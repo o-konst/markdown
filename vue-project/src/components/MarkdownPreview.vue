@@ -137,6 +137,13 @@ defineProps<{
 }
 
 .markdown-body :deep(input[type='checkbox']) {
+  /* `em` sizing (not a fixed px) so the checkbox scales with the user's chosen font size,
+     same as the surrounding text. */
+  width: 1.1em;
+  height: 1.1em;
   margin-right: 0.4em;
+  /* Nudges the box to align with the first line of text rather than sitting low, which
+     becomes more noticeable the larger `em` scales it. */
+  vertical-align: -0.15em;
 }
 </style>
