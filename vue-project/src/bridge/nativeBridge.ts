@@ -64,11 +64,36 @@ export interface HostInfo {
   preferences?: unknown
 }
 
+/** Marks the formatting toolbar can toggle — the ones this schema actually has. */
+export type ActiveMark = 'bold' | 'italic' | 'strike' | 'code'
+
+/** Mutually-exclusive block types the formatting toolbar can toggle. */
+export type ActiveBlock = 'blockquote' | 'bulletList' | 'orderedList' | 'taskList' | 'codeBlock'
+
+/**
+ * Snapshot of the editor's current selection/mode, for a native formatting toolbar to
+ * render active/disabled button state from — see the "Native SwiftUI formatting toolbar"
+ * phase of `.claude/plans/live-preview-editing-plan.md`.
+ */
+export interface EditorToolbarState {
+  mode: 'reading' | 'edit'
+  /** `mode === 'edit'`. Native additionally factors in its own Source-view toggle, which
+   * this side has no visibility into. */
+  isEditable: boolean
+  activeMarks: ActiveMark[]
+  headingLevel: number | null
+  activeBlock: ActiveBlock | null
+  linkActive: boolean
+  canUndo: boolean
+  canRedo: boolean
+}
+
 type HostRequest =
   | { method: 'connect' }
   | { method: 'render'; markdown: string }
   | { method: 'outlineState'; available: boolean }
   | { method: 'documentEdit'; text: string }
+  | { method: 'editorStateChanged'; state: EditorToolbarState }
 
 /**
  * Methods the host calls on the web UI. Each is installed by its own subscriber, so all
@@ -87,6 +112,14 @@ export interface MarkdownHost {
    * `setDocument`/`setPreferences` — there's exactly one owner.
    */
   flushPendingEdit?(): Promise<string>
+  /**
+   * Native → JS: runs a formatting command (`toggleBold`, `setHeading`, `setMode`, etc. —
+   * see `editor/formatCommands.ts`) against the live WYSIWYG editor and returns whether it
+   * succeeded. Installed by `useWysiwygDocument`, single-owner like `flushPendingEdit`.
+   * Synchronous (Tiptap's `chain().run()` already is) — `callAsyncJavaScript` on the native
+   * side can await a synchronous return just as well as a promise.
+   */
+  runEditorCommand?(command: string, payload?: unknown): boolean
 }
 
 declare global {
@@ -195,6 +228,22 @@ export async function reportEdit(text: string): Promise<void> {
     await send({ method: 'documentEdit', text })
   } catch {
     // Host predates WYSIWYG editing; it has nothing to receive this into.
+  }
+}
+
+/**
+ * Reports the formatting toolbar's current state (active marks, heading level, mode,
+ * undo/redo availability, ...) so a native toolbar can render pressed/disabled buttons.
+ * No reply payload — an ack, like {@link reportOutlineState}/{@link reportEdit}. Hosts
+ * that predate the formatting toolbar answer `Unknown bridge method`, expected rather
+ * than an error worth surfacing.
+ */
+export async function reportEditorState(state: EditorToolbarState): Promise<void> {
+  if (!isNativeHost()) return
+  try {
+    await send({ method: 'editorStateChanged', state })
+  } catch {
+    // Host predates the formatting toolbar; it has nothing to receive this into.
   }
 }
 

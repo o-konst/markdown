@@ -2,6 +2,7 @@ import { Editor } from '@tiptap/vue-3'
 import { history } from '@tiptap/pm/history'
 
 import { onDocumentChange as bridgeOnDocumentChange, reportEdit as bridgeReportEdit } from '../bridge/nativeBridge'
+import { runFormatCommand } from './formatCommands'
 import { createExtensions } from './schema'
 
 /** Debounce for steady-state edit reporting — independent of native's own 800ms autosave/disk-write debounce (see the Bridge section of `.claude/docs/live-preview-editing-research.md`). */
@@ -24,6 +25,14 @@ export interface WysiwygDocumentOptions {
   /** Overridable for tests; defaults to the real bridge in {@link ../bridge/nativeBridge}. */
   reportEdit?: (text: string) => Promise<void>
   onDocumentChange?: (listener: (text: string) => void) => () => void
+  /**
+   * Handles the `'setMode'` formatting command — mode is Vue state owned by whatever
+   * mounts this composable (`App.vue`'s `mode` ref, via `WysiwygEditor.vue`), not part of
+   * this composable or the editor schema, so it's threaded through as a callback rather
+   * than handled internally. No-ops (and `runEditorCommand('setMode', ...)` reports
+   * failure) if omitted.
+   */
+  onSetMode?: (mode: 'reading' | 'edit') => void
 }
 
 export interface WysiwygDocument {
@@ -123,9 +132,18 @@ export function useWysiwygDocument(options: WysiwygDocumentOptions = {}): Wysiwy
   const previousFlush = host.flushPendingEdit
   host.flushPendingEdit = flushPendingEdit
 
+  // Same single-owner assign/restore as `flushPendingEdit` above, for the reverse
+  // direction: native invoking a formatting command in this editor.
+  function runEditorCommand(command: string, payload?: unknown): boolean {
+    return runFormatCommand(editor, command, payload, options.onSetMode ?? (() => {}))
+  }
+  const previousRunCommand = host.runEditorCommand
+  host.runEditorCommand = runEditorCommand
+
   function dispose() {
     unsubscribe()
     if (host.flushPendingEdit === flushPendingEdit) host.flushPendingEdit = previousFlush
+    if (host.runEditorCommand === runEditorCommand) host.runEditorCommand = previousRunCommand
     clearPendingDebounce()
     editor.destroy()
   }

@@ -20,7 +20,11 @@ const { html: documentHtml, nodes: readingNodes, ids: readingIds, hasOutline: re
  *
  * Defaults to `'edit'`: opening or selecting a document should land directly in the live
  * WYSIWYG surface, since that's the app's primary way of working with a note now — Reading
- * view is an opt-in, read-only mode, not the entry point. */
+ * view is an opt-in, read-only mode, not the entry point.
+ *
+ * Switched from the native toolbar (a `'setMode'` formatting command, see
+ * `WysiwygEditor.vue`'s `setMode` emit), not an in-content button — this ref stays the
+ * source of truth either way, only who's allowed to flip it changed. */
 const mode = ref<'reading' | 'edit'>('edit')
 const wysiwygRef = shallowRef<InstanceType<typeof WysiwygEditor> | null>(null)
 
@@ -45,10 +49,6 @@ function scrollToHeading(id: string) {
   scroller.value
     ?.querySelector(`#${CSS.escape(id)}`)
     ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-function toggleMode() {
-  mode.value = mode.value === 'reading' ? 'edit' : 'reading'
 }
 
 // MARK: - Resizable divider
@@ -123,16 +123,6 @@ function startResize(event: PointerEvent) {
     </template>
 
     <div class="content-pane">
-      <div class="mode-toolbar">
-        <button
-          type="button"
-          class="mode-toggle"
-          :aria-pressed="mode === 'edit'"
-          @click="toggleMode"
-        >
-          {{ mode === 'edit' ? 'Reading view' : 'Edit' }}
-        </button>
-      </div>
       <div ref="scroller" class="content" :style="{ fontSize: `${preferences.fontSize}px` }">
         <MarkdownPreview
           v-show="mode === 'reading'"
@@ -145,6 +135,8 @@ function startResize(event: PointerEvent) {
           ref="wysiwygRef"
           :class="{ 'page-width': preferences.contentWidth === 'page' }"
           :initial-text="source"
+          :mode="mode"
+          @set-mode="mode = $event"
         />
       </div>
     </div>
@@ -189,26 +181,6 @@ function startResize(event: PointerEvent) {
   min-width: 0;
   display: flex;
   flex-direction: column;
-}
-
-.mode-toolbar {
-  flex: 0 0 auto;
-  display: flex;
-  justify-content: flex-end;
-  padding: 0.5rem 1rem 0;
-}
-
-.mode-toggle {
-  font-size: 0.85em;
-  padding: 0.3em 0.8em;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-background-soft);
-  cursor: pointer;
-}
-
-.mode-toggle[aria-pressed='true'] {
-  background: var(--color-background-mute);
 }
 
 .content {

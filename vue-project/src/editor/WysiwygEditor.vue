@@ -2,7 +2,9 @@
 import { EditorContent } from '@tiptap/vue-3'
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
+import { reportEditorState } from '../bridge/nativeBridge'
 import { useEditorOutline } from '../composables/useEditorOutline'
+import { useEditorToolbarState } from '../composables/useEditorToolbarState'
 import TableControls from './TableControls.vue'
 import { useWysiwygDocument } from './useWysiwygDocument'
 
@@ -19,10 +21,38 @@ const props = defineProps<{
    * see `useWysiwygDocument`'s `applyExternalText` doc comment) and again on every
    * subsequent change, through the same guarded, history-resetting path bridge pushes use. */
   initialText: string
+  /** Owned by `App.vue` — this component only reads it (to report `EditorToolbarState`)
+   * and requests changes to it (via `setMode`, driven by the native toolbar's `'setMode'`
+   * command); it never mutates it directly. */
+  mode: 'reading' | 'edit'
 }>()
 
-const doc = useWysiwygDocument({ initialText: props.initialText })
+const emit = defineEmits<{
+  setMode: [mode: 'reading' | 'edit']
+}>()
+
+const doc = useWysiwygDocument({
+  initialText: props.initialText,
+  onSetMode: (mode) => emit('setMode', mode),
+})
 const outline = useEditorOutline(doc.editor)
+const toolbarState = useEditorToolbarState(doc.editor, () => props.mode)
+
+// Reports to native only when the reported shape actually changes — `toolbarState`
+// recomputes a fresh object on every transaction (most of which don't touch anything a
+// toolbar button cares about, e.g. moving the cursor within a paragraph with no active
+// marks), so a naive `watch` would fire one bridge round-trip per keystroke.
+let lastReportedState = ''
+watch(
+  toolbarState,
+  (state) => {
+    const key = JSON.stringify(state)
+    if (key === lastReportedState) return
+    lastReportedState = key
+    void reportEditorState(state)
+  },
+  { immediate: true },
+)
 
 const contentRoot = ref<HTMLElement | null>(null)
 
