@@ -85,6 +85,9 @@ defineExpose({
   line-height: 1.25;
   margin: 1.6em 0 0.6em;
   scroll-margin-top: 1rem;
+  /* `base.css` resets `font-weight: normal` on every element, which would otherwise
+     flatten headings to the same weight as body text. */
+  font-weight: 600;
 }
 
 .wysiwyg-editor__content :deep(h1) {
@@ -96,6 +99,14 @@ defineExpose({
   font-size: 1.45em;
   border-bottom: 1px solid var(--color-border);
   padding-bottom: 0.2em;
+}
+
+.wysiwyg-editor__content :deep(strong) {
+  /* Same `base.css` reset — without this, typing `**bold**` (or the input rule converting
+     it) produces a real `strong` mark that's visually indistinguishable from plain text,
+     since the browser's default `strong { font-weight: bolder }` never applies. This was
+     reported directly by a user testing the live-preview editor. */
+  font-weight: 700;
 }
 
 .wysiwyg-editor__content :deep(p),

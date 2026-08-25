@@ -38,6 +38,12 @@ defineProps<{
   scroll-margin-top: 1rem;
 }
 
+.markdown-body :deep(:is(h1, h2, h3, h4, h5, h6)) {
+  /* `base.css` resets `font-weight: normal` on every element, which would otherwise flatten
+     headings to the same weight as body text. */
+  font-weight: 600;
+}
+
 .markdown-body :deep(h1) {
   font-size: 1.9em;
   margin-top: 0;
@@ -47,6 +53,12 @@ defineProps<{
   font-size: 1.45em;
   border-bottom: 1px solid var(--color-border);
   padding-bottom: 0.2em;
+}
+
+.markdown-body :deep(strong) {
+  /* Same `base.css` reset — without this, `**bold**` renders visually identical to plain
+     text, since the browser's default `strong { font-weight: bolder }` never applies. */
+  font-weight: 700;
 }
 
 .markdown-body :deep(p),
