@@ -21,3 +21,6 @@ DerivedData/
 *.pem
 
 .node_modules/
+
+# Agent-created git worktrees (isolated checkouts for in-progress subagent work)
+.claude/worktrees/
