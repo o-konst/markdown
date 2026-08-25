@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import WysiwygEditor from '../WysiwygEditor.vue'
 
@@ -76,5 +76,50 @@ describe('WysiwygEditor (mounted)', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.find('[role="toolbar"]').exists()).toBe(true)
+  })
+
+  it('copies the code block\'s text via the Clipboard API and shows a "copied" state', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+
+    wrapper = mount(WysiwygEditor, {
+      props: { initialText: '```js\nconst x = 1;\n```\n' },
+      attachTo: document.body,
+    })
+    await wrapper.vm.$nextTick()
+
+    const button = wrapper.find<HTMLButtonElement>('.code-block-view__copy')
+    expect(button.exists()).toBe(true)
+    expect(button.attributes('aria-label')).toBe('Copy code')
+
+    await button.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(writeText).toHaveBeenCalledWith('const x = 1;')
+    expect(button.attributes('aria-label')).toBe('Copied')
+  })
+
+  it('falls back to execCommand when the Clipboard API rejects', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+      configurable: true,
+    })
+    const execCommand = vi.fn().mockReturnValue(true)
+    document.execCommand = execCommand
+
+    wrapper = mount(WysiwygEditor, {
+      props: { initialText: '```js\nconst x = 1;\n```\n' },
+      attachTo: document.body,
+    })
+    await wrapper.vm.$nextTick()
+
+    const button = wrapper.find<HTMLButtonElement>('.code-block-view__copy')
+    await button.trigger('click')
+    // The Clipboard API call rejects asynchronously before the execCommand fallback runs.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await wrapper.vm.$nextTick()
+
+    expect(execCommand).toHaveBeenCalledWith('copy')
+    expect(button.attributes('aria-label')).toBe('Copied')
   })
 })
