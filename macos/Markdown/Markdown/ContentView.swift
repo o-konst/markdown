@@ -30,6 +30,15 @@ struct ContentView: View {
     /// Reported by the web UI: false for documents with nothing to navigate.
     @State private var isOutlineAvailable = false
 
+    /// Reported by the web UI on every editor transaction — drives `EditorFormattingToolbar`.
+    @State private var toolbarState = EditorToolbarState.initial
+
+    /// Set once the web view's coordinator exists (see `MarkdownWebView.registerRunEditorCommand`).
+    /// A local `@State` closure rather than something routed through `Workspace`, unlike
+    /// `flushEditorPendingEdit` — this is a purely UI-local concern (the toolbar), not
+    /// something `Workspace` itself ever needs to call.
+    @State private var runEditorCommand: (String, [String: Any]?) async -> Bool = { _, _ in false }
+
     private var preferences: WebPreferences {
         WebPreferences(
             outlineVisible: outlineVisible,
@@ -53,6 +62,14 @@ struct ContentView: View {
         } detail: {
             detail
                 .toolbar {
+                    EditorFormattingToolbar(
+                        state: toolbarState,
+                        isSourceViewShowing: isEditing,
+                        run: { command, payload in
+                            Task { @MainActor in _ = await runEditorCommand(command, payload) }
+                        }
+                    )
+
                     ToolbarItem {
                         // The WYSIWYG editor (`preview`, below) is the primary way to edit
                         // now — this toggle shows the plain-text source as a fallback, not
@@ -156,7 +173,9 @@ struct ContentView: View {
             preferences: preferences,
             onOutlineAvailabilityChange: { isOutlineAvailable = $0 },
             onDocumentEdit: { workspace.text = $0 },
-            registerFlushPendingEdit: { workspace.flushEditorPendingEdit = $0 }
+            registerFlushPendingEdit: { workspace.flushEditorPendingEdit = $0 },
+            onEditorStateChange: { toolbarState = $0 },
+            registerRunEditorCommand: { runEditorCommand = $0 }
         )
     }
 

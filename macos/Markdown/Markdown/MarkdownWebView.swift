@@ -48,12 +48,24 @@ struct MarkdownWebView {
     /// rather than concrete UI-framework types.
     var registerFlushPendingEdit: (@escaping () async -> String?) -> Void
 
+    /// Called when the web UI reports a new `EditorToolbarState` (active marks, heading
+    /// level, mode, ...), so a native formatting toolbar can render itself.
+    var onEditorStateChange: (EditorToolbarState) -> Void
+
+    /// Called on every update with a closure that runs a formatting command
+    /// (`WebPreviewCoordinator.runEditorCommand(_:payload:)`) — the reverse direction of
+    /// `onDocumentEdit`. Unlike `registerFlushPendingEdit`, this one is consumed directly by
+    /// `ContentView`'s own toolbar rather than by `Workspace`, so it's registered the same
+    /// way but for a purely UI-local concern.
+    var registerRunEditorCommand: (@escaping (String, [String: Any]?) async -> Bool) -> Void
+
     func makeCoordinator() -> WebPreviewCoordinator {
         WebPreviewCoordinator(
             text: text,
             preferences: preferences,
             onOutlineAvailabilityChange: onOutlineAvailabilityChange,
-            onDocumentEdit: onDocumentEdit
+            onDocumentEdit: onDocumentEdit,
+            onEditorStateChange: onEditorStateChange
         )
     }
 }
@@ -68,10 +80,14 @@ extension MarkdownWebView: NSViewRepresentable {
     func updateNSView(_ webView: WKWebView, context: Context) {
         context.coordinator.onOutlineAvailabilityChange = onOutlineAvailabilityChange
         context.coordinator.onDocumentEdit = onDocumentEdit
+        context.coordinator.onEditorStateChange = onEditorStateChange
         context.coordinator.setDocumentText(text)
         context.coordinator.setPreferences(preferences)
         registerFlushPendingEdit { [coordinator = context.coordinator] in
             await coordinator.flushPendingEdit()
+        }
+        registerRunEditorCommand { [coordinator = context.coordinator] command, payload in
+            await coordinator.runEditorCommand(command, payload: payload)
         }
     }
 }
@@ -86,10 +102,14 @@ extension MarkdownWebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.onOutlineAvailabilityChange = onOutlineAvailabilityChange
         context.coordinator.onDocumentEdit = onDocumentEdit
+        context.coordinator.onEditorStateChange = onEditorStateChange
         context.coordinator.setDocumentText(text)
         context.coordinator.setPreferences(preferences)
         registerFlushPendingEdit { [coordinator = context.coordinator] in
             await coordinator.flushPendingEdit()
+        }
+        registerRunEditorCommand { [coordinator = context.coordinator] command, payload in
+            await coordinator.runEditorCommand(command, payload: payload)
         }
     }
 }
@@ -104,6 +124,7 @@ final class WebPreviewCoordinator: NSObject {
     private var preferences: WebPreferences
     var onOutlineAvailabilityChange: (Bool) -> Void
     var onDocumentEdit: (String) -> Void
+    var onEditorStateChange: (EditorToolbarState) -> Void
     private var isLoaded = false
     private weak var webView: WKWebView?
 
@@ -111,12 +132,14 @@ final class WebPreviewCoordinator: NSObject {
         text: String,
         preferences: WebPreferences,
         onOutlineAvailabilityChange: @escaping (Bool) -> Void,
-        onDocumentEdit: @escaping (String) -> Void
+        onDocumentEdit: @escaping (String) -> Void,
+        onEditorStateChange: @escaping (EditorToolbarState) -> Void
     ) {
         self.text = text
         self.preferences = preferences
         self.onOutlineAvailabilityChange = onOutlineAvailabilityChange
         self.onDocumentEdit = onDocumentEdit
+        self.onEditorStateChange = onEditorStateChange
     }
 
     func makeWebView() -> WKWebView {
@@ -208,6 +231,34 @@ final class WebPreviewCoordinator: NSObject {
                 case .failure(let error):
                     NSLog("Markdown: failed to flush the WYSIWYG editor's pending edit: \(error)")
                     continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+
+    /// Runs a formatting command (`toggleBold`, `setHeading`, `setMode`, ...) against the
+    /// live WYSIWYG editor — native calling into JS, the same direction and the same
+    /// `callAsyncJavaScript` + `withCheckedContinuation` bridging as `flushPendingEdit()`
+    /// above (that fix is the template here: this SDK's `callAsyncJavaScript` has no
+    /// `async throws`-returning overload, only a completion-handler one). `payload` is
+    /// always passed as a dictionary, `[:]` when the command takes none — `toggleLink`
+    /// with an empty payload correctly reads on the JS side as "no href", i.e. remove the
+    /// link, so there is no need to distinguish "no payload" from "empty payload" here.
+    func runEditorCommand(_ command: String, payload: [String: Any]? = nil) async -> Bool {
+        guard isLoaded, let webView else { return false }
+        return await withCheckedContinuation { continuation in
+            webView.callAsyncJavaScript(
+                "return window.__markdownHost?.runEditorCommand?.(command, payload) ?? false;",
+                arguments: ["command": command, "payload": payload ?? [:]],
+                in: nil,
+                in: .page
+            ) { result in
+                switch result {
+                case .success(let value):
+                    continuation.resume(returning: value as? Bool ?? false)
+                case .failure(let error):
+                    NSLog("Markdown: failed to run editor command '\(command)': \(error)")
+                    continuation.resume(returning: false)
                 }
             }
         }
@@ -305,6 +356,16 @@ extension WebPreviewCoordinator: WKScriptMessageHandlerWithReply {
             // `onDocumentEdit`, is what makes that true. Do not reorder these two lines.
             text = newText
             onDocumentEdit(newText)
+            replyHandler(nil, nil)
+
+        case "editorStateChanged":
+            guard let stateBody = body["state"] as? [String: Any],
+                  let state = EditorToolbarState(body: stateBody)
+            else {
+                replyHandler(nil, "`editorStateChanged` requires a valid `state` object")
+                return
+            }
+            onEditorStateChange(state)
             replyHandler(nil, nil)
 
         default:
