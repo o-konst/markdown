@@ -222,10 +222,15 @@ defineExpose({
 }
 
 .wysiwyg-editor__content :deep(ul[data-type='taskList'] input[type='checkbox']) {
-  /* `em` sizing (not a fixed px) so the checkbox scales with the user's chosen font size,
-     same as the surrounding text. */
+  /* `em` sizing alone is unreliable here: WebKit's native checkbox often doesn't visually
+     honor `width`/`height` on the control even though the layout box does resize — a
+     known cross-browser quirk. `transform: scale()` resizes the actually-rendered pixels
+     regardless, so it's the primary mechanism; `width`/`height` stays too, since it's
+     still what the surrounding flex layout uses to reserve space next to the content. */
   width: 1.1em;
   height: 1.1em;
+  transform: scale(1.3);
+  transform-origin: center;
   flex-shrink: 0;
   /* Nudges the box to align with the first line of text rather than sitting low, which
      becomes more noticeable the larger `em` scales it. */
