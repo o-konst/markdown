@@ -41,6 +41,13 @@ struct MarkdownWebView {
     /// for why this must not simply re-push the same text back into the web view.
     var onDocumentEdit: (String) -> Void
 
+    /// Called on every update with a closure that flushes the WYSIWYG editor's pending edit
+    /// (see `WebPreviewCoordinator.flushPendingEdit()`). `Workspace` has no reference to this
+    /// coordinator — or to `WKWebView`/SwiftUI at all — so this is how it gets one, matching
+    /// `Workspace`'s existing style of taking dependencies (vault, watcher) as plain closures
+    /// rather than concrete UI-framework types.
+    var registerFlushPendingEdit: (@escaping () async -> String?) -> Void
+
     func makeCoordinator() -> WebPreviewCoordinator {
         WebPreviewCoordinator(
             text: text,
@@ -63,6 +70,9 @@ extension MarkdownWebView: NSViewRepresentable {
         context.coordinator.onDocumentEdit = onDocumentEdit
         context.coordinator.setDocumentText(text)
         context.coordinator.setPreferences(preferences)
+        registerFlushPendingEdit { [coordinator = context.coordinator] in
+            await coordinator.flushPendingEdit()
+        }
     }
 }
 
@@ -78,6 +88,9 @@ extension MarkdownWebView: UIViewRepresentable {
         context.coordinator.onDocumentEdit = onDocumentEdit
         context.coordinator.setDocumentText(text)
         context.coordinator.setPreferences(preferences)
+        registerFlushPendingEdit { [coordinator = context.coordinator] in
+            await coordinator.flushPendingEdit()
+        }
     }
 }
 
@@ -170,24 +183,33 @@ final class WebPreviewCoordinator: NSObject {
 
     /// Asks the WYSIWYG editor to report its current text immediately, cancelling any
     /// pending debounce — the opposite direction of `documentEdit`, native calling into
-    /// JS. `Workspace` does not currently call this before switching the open file (see
-    /// the design note in `.claude/docs/live-preview-editing-research.md` and this
-    /// phase's report): `Workspace.selectedFile`'s flush-on-switch is a synchronous
-    /// property observer, and this call is inherently asynchronous, so wiring the two
-    /// together needs a small architectural change to `Workspace` beyond this phase's
-    /// scope, not just a call here. Implemented and ready to use once that lands.
+    /// JS. Wired into every `Workspace` flush point (`flushPendingSaveAsync`) so switching
+    /// files can't silently drop trailing keystrokes still sitting in the editor's own
+    /// debounce.
+    ///
+    /// `callAsyncJavaScript` has no `async throws`-returning overload in this SDK — its
+    /// only form is completion-handler-based (`(Result<Any, Error>) -> Void`), same as
+    /// `pushDocument()`/`pushPreferences()` above. An earlier version of this method wrote
+    /// `try await webView.callAsyncJavaScript(...)` directly, which compiled but silently
+    /// resolved to a *different*, `Void`-returning overload — caught by the build's own
+    /// warnings (`result` inferred as `()`, "cast from `()` to `String` always fails"),
+    /// not by any runtime symptom. Bridged through `withCheckedContinuation` instead.
     func flushPendingEdit() async -> String? {
         guard isLoaded, let webView else { return nil }
-        do {
-            let result = try await webView.callAsyncJavaScript(
+        return await withCheckedContinuation { continuation in
+            webView.callAsyncJavaScript(
                 "return await window.__markdownHost?.flushPendingEdit?.();",
                 in: nil,
                 in: .page
-            )
-            return result as? String
-        } catch {
-            NSLog("Markdown: failed to flush the WYSIWYG editor's pending edit: \(error)")
-            return nil
+            ) { result in
+                switch result {
+                case .success(let value):
+                    continuation.resume(returning: value as? String)
+                case .failure(let error):
+                    NSLog("Markdown: failed to flush the WYSIWYG editor's pending edit: \(error)")
+                    continuation.resume(returning: nil)
+                }
+            }
         }
     }
 }

@@ -20,12 +20,20 @@ struct SidebarView: View {
 
     @State private var isOpenDropTargeted = false
 
+    /// `Workspace.selectedFile` is read-only externally (switching it needs to flush the
+    /// WYSIWYG editor's pending edit first, which is `async`, and a `List` selection
+    /// `Binding`'s `set` can't `await`) — `selectFile(_:)` is the synchronous entry point
+    /// that does the `async` work internally.
+    private var selectedFileBinding: Binding<URL?> {
+        Binding(get: { workspace.selectedFile }, set: { workspace.selectFile($0) })
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if workspace.isSearchActive {
                 searchResults
             } else if let root = workspace.root {
-                List(selection: $workspace.selectedFile) {
+                List(selection: selectedFileBinding) {
                     Section {
                         ForEach(root.children ?? []) { child in
                             AnyView(FileTreeRow(node: child))
@@ -73,7 +81,7 @@ struct SidebarView: View {
                     guard let provider = providers.first else { return false }
                     _ = provider.loadObject(ofClass: URL.self) { url, _ in
                         guard let url else { return }
-                        Task { @MainActor in workspace.open(dropped: url) }
+                        Task { @MainActor in await workspace.open(dropped: url) }
                     }
                     return true
                 }
@@ -98,7 +106,7 @@ struct SidebarView: View {
                 }
             }
         } else {
-            List(selection: $workspace.selectedFile) {
+            List(selection: selectedFileBinding) {
                 Section {
                     ForEach(workspace.searchHits) { hit in
                         SearchHitRow(hit: hit).tag(hit.url)

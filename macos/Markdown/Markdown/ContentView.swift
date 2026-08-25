@@ -79,7 +79,7 @@ struct ContentView: View {
         .fileImporter(isPresented: $isChoosingFolder, allowedContentTypes: [.folder]) { result in
             switch result {
             case .success(let url):
-                workspace.open(folder: url)
+                Task { @MainActor in await workspace.open(folder: url) }
             case .failure(let error):
                 workspace.reportOpenFailure(error)
             }
@@ -87,7 +87,7 @@ struct ContentView: View {
         .fileImporter(isPresented: $isChoosingFile, allowedContentTypes: MarkdownFile.contentTypes) { result in
             switch result {
             case .success(let url):
-                workspace.open(file: url)
+                Task { @MainActor in await workspace.open(file: url) }
             case .failure(let error):
                 workspace.reportOpenFailure(error)
             }
@@ -96,7 +96,7 @@ struct ContentView: View {
             guard let provider = providers.first else { return false }
             _ = provider.loadObject(ofClass: URL.self) { url, _ in
                 guard let url else { return }
-                Task { @MainActor in workspace.open(dropped: url) }
+                Task { @MainActor in await workspace.open(dropped: url) }
             }
             return true
         }
@@ -104,7 +104,7 @@ struct ContentView: View {
         // shortcut to the app, or opened via "Open With" — declared in Info.plist's
         // `CFBundleDocumentTypes`. Same routing as an in-app drop, so behavior matches.
         .onOpenURL { url in
-            workspace.open(dropped: url)
+            Task { @MainActor in await workspace.open(dropped: url) }
         }
         .overlay {
             if isDropTargeted {
@@ -155,7 +155,8 @@ struct ContentView: View {
             text: workspace.text,
             preferences: preferences,
             onOutlineAvailabilityChange: { isOutlineAvailable = $0 },
-            onDocumentEdit: { workspace.text = $0 }
+            onDocumentEdit: { workspace.text = $0 },
+            registerFlushPendingEdit: { workspace.flushEditorPendingEdit = $0 }
         )
     }
 

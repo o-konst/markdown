@@ -54,7 +54,7 @@ struct FolderCommands: Commands {
                 .disabled(folderPicker == nil)
 
             Button(workspace?.root != nil ? "Close Folder" : "Close File") {
-                workspace?.close()
+                Task { @MainActor in await workspace?.close() }
             }
             .disabled(workspace?.root == nil && workspace?.selectedFile == nil)
         }
