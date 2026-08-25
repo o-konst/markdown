@@ -16,8 +16,12 @@ const { html: documentHtml, nodes: readingNodes, ids: readingIds, hasOutline: re
  * decision" section of `.claude/docs/live-preview-editing-research.md`. Both stay mounted
  * (`v-show`, not `v-if`) so switching back and forth never rebuilds the editor or loses
  * its undo history, and the WYSIWYG editor's own bridge subscription stays live even
- * while Reading view is what's visible. */
-const mode = ref<'reading' | 'edit'>('reading')
+ * while Reading view is what's visible.
+ *
+ * Defaults to `'edit'`: opening or selecting a document should land directly in the live
+ * WYSIWYG surface, since that's the app's primary way of working with a note now — Reading
+ * view is an opt-in, read-only mode, not the entry point. */
+const mode = ref<'reading' | 'edit'>('edit')
 const wysiwygRef = shallowRef<InstanceType<typeof WysiwygEditor> | null>(null)
 
 const nodes = computed(() => (mode.value === 'edit' ? (wysiwygRef.value?.nodes ?? []) : readingNodes.value))
