@@ -19,6 +19,9 @@ internal static class MarkdownFile
     private static readonly HashSet<string> Extensions =
         new(StringComparer.OrdinalIgnoreCase) { ".md", ".markdown", ".mdown", ".mkd", ".mdx", ".text", ".txt" };
 
+    /// <summary>The recognised extensions, for <c>FileOpenPicker.FileTypeFilter</c>.</summary>
+    public static IReadOnlyCollection<string> PickerExtensions => Extensions;
+
     public static bool Matches(string path) => Extensions.Contains(Path.GetExtension(path));
 }
 

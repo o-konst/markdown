@@ -101,6 +101,16 @@ internal sealed partial class MarkdownWebView : UserControl
     /// <see cref="SetColorScheme"/> actually taking effect (e.g. applying the initial theme).</summary>
     public event EventHandler? CoreWebView2Ready;
 
+    /// <summary>Raised when the WYSIWYG editor reports an edit, so it flows into
+    /// <c>Workspace.Text</c> and through the existing autosave/vault-write path unchanged.
+    /// See the echo-suppression note in <see cref="OnWebMessageReceived"/>'s `"documentEdit"`
+    /// case for why this must not simply re-push the same text back into the web view.</summary>
+    public event EventHandler<string>? DocumentEdited;
+
+    /// <summary>Raised when the web UI reports a new <see cref="EditorToolbarState"/> (active
+    /// marks, heading level, mode, ...), so a native formatting toolbar can render itself.</summary>
+    public event EventHandler<EditorToolbarState>? EditorStateChanged;
+
     public MarkdownWebView()
     {
         InitializeComponent();
@@ -268,6 +278,35 @@ internal sealed partial class MarkdownWebView : UserControl
                 Reply(id, null);
                 break;
 
+            case "documentEdit":
+                if (body?["text"]?.GetValue<string>() is not string newText)
+                {
+                    Reply(id, null, "`documentEdit` requires a `text` string");
+                    return;
+                }
+
+                // Echo suppression: `SetDocumentText`'s `if (newText == text) return;` is what
+                // stops this edit from being pushed straight back down into the web view and
+                // clobbering the WYSIWYG editor's cursor/selection — but only if `text` already
+                // matches by the time the next `SetDocumentText(workspace.Text)` call happens.
+                // Setting it here, before raising `DocumentEdited`, is what makes that true. Do
+                // not reorder these two lines. Mirrors MarkdownWebView.swift's identical comment.
+                text = newText;
+                DocumentEdited?.Invoke(this, newText);
+                Reply(id, null);
+                break;
+
+            case "editorStateChanged":
+                if (body?["state"] is not JsonObject stateBody || EditorToolbarState.TryParse(stateBody) is not { } state)
+                {
+                    Reply(id, null, "`editorStateChanged` requires a valid `state` object");
+                    return;
+                }
+
+                EditorStateChanged?.Invoke(this, state);
+                Reply(id, null);
+                break;
+
             case null:
                 Reply(id, null, "Malformed bridge message");
                 break;
@@ -361,5 +400,73 @@ internal sealed partial class MarkdownWebView : UserControl
         {
             isPushing = false;
         }
+    }
+
+    // MARK: - Calls from native into the Vue app
+
+    /// <summary>
+    /// Asks the WYSIWYG editor to report its current text immediately, cancelling any pending
+    /// debounce — the opposite direction of `documentEdit`, native calling into JS. Wired into
+    /// <c>Workspace.FlushPendingSaveAsync</c> (mirroring macOS's <c>flushPendingSaveAsync(to:)</c>)
+    /// so switching files can't silently drop trailing keystrokes still sitting in the editor's
+    /// own debounce.
+    ///
+    /// <c>ExecuteScriptAsync</c> awaits a returned JavaScript <c>Promise</c> itself and hands
+    /// back its resolved value JSON-encoded, so wrapping the call in an <c>async</c> IIFE and
+    /// awaiting it here is enough — no separate reply-channel plumbing like <see cref="Reply"/>
+    /// is needed for this native-initiated direction.
+    /// </summary>
+    public async Task<string?> FlushPendingEditAsync()
+    {
+        if (!isLoaded || WebView.CoreWebView2 is null)
+        {
+            return null;
+        }
+
+        string resultJson;
+        try
+        {
+            resultJson = await WebView.CoreWebView2.ExecuteScriptAsync(
+                "(async () => (await window.__markdownHost?.flushPendingEdit?.()) ?? null)();");
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        return JsonNode.Parse(resultJson)?.GetValue<string>();
+    }
+
+    /// <summary>
+    /// Runs a formatting command (`toggleBold`, `setHeading`, `setMode`, ...) against the live
+    /// WYSIWYG editor — native calling into JS, the same direction and the same
+    /// `ExecuteScriptAsync`-awaits-a-promise mechanism as <see cref="FlushPendingEditAsync"/>
+    /// above. <paramref name="payload"/> is always serialized as an object, `{}` when the
+    /// command takes none — `toggleLink` with an empty payload correctly reads on the JS side
+    /// as "no href", i.e. remove the link, so there is no need to distinguish "no payload" from
+    /// "empty payload" here.
+    /// </summary>
+    public async Task<bool> RunEditorCommandAsync(string command, JsonObject? payload = null)
+    {
+        if (!isLoaded || WebView.CoreWebView2 is null)
+        {
+            return false;
+        }
+
+        string script = $$"""
+            (async () => (await window.__markdownHost?.runEditorCommand?.({{JsonSerializer.Serialize(command)}}, {{(payload ?? new JsonObject()).ToJsonString()}})) ?? false)();
+            """;
+
+        string resultJson;
+        try
+        {
+            resultJson = await WebView.CoreWebView2.ExecuteScriptAsync(script);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        return JsonNode.Parse(resultJson)?.GetValue<bool>() ?? false;
     }
 }

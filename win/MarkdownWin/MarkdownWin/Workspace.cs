@@ -6,8 +6,9 @@
 //  Mirrors Workspace.swift.
 //
 //  Edits are saved for you: typing schedules a debounced write, and switching files or
-//  closing the folder flushes first. Nothing is written directly to disk — every change goes
-//  through VaultStore, so it is committed to the vault's history and can be undone.
+//  closing the folder flushes first. When a folder is open, every change goes through
+//  VaultStore, so it is committed to the vault's history and can be undone. A file opened on
+//  its own (see OpenFileAsync) has no vault to write through and is written directly instead.
 //
 //  Unlike the Swift version (whose FFI calls run synchronously on an already-busy main
 //  thread), vault calls here are wrapped in Task.Run to keep the UI responsive. That
@@ -131,6 +132,15 @@ internal sealed class Workspace : ObservableBase
     /// <summary>Watches for changes made outside the app — by an MCP client, or another editor.</summary>
     private VaultWatcher? watcher;
 
+    /// <summary>Set by the web view once it has loaded (see <c>MarkdownWebView.FlushPendingEditAsync</c>).
+    /// Asks the WYSIWYG editor to report its current text immediately, cancelling any pending
+    /// debounce, before a flush reads <see cref="Text"/> — otherwise switching files faster
+    /// than the editor's own debounce could write stale content, silently dropping the last few
+    /// keystrokes. <c>null</c> before the web view has loaded; every flush point below
+    /// tolerates that by falling back to flushing <see cref="Text"/> as it already stands, the
+    /// same as before this existed. Mirrors <c>Workspace.swift</c>'s <c>flushEditorPendingEdit</c>.</summary>
+    public Func<Task<string?>>? FlushEditorPendingEdit { get; set; }
+
     public async Task OpenAsync(string folder)
     {
         await FlushPendingSaveAsync(SelectedFile);
@@ -152,6 +162,73 @@ internal sealed class Workspace : ObservableBase
         RestartSearch();
 
         watcher = new VaultWatcher(folder, changed => AbsorbExternalChanges(changed));
+    }
+
+    /// <summary>Opens a single file with no folder context. Mirrors Workspace.swift's
+    /// <c>open(file:)</c>: its enclosing folder is deliberately not opened as a vault — there
+    /// is nothing to browse, search, or hand to the assistant, only the file itself, read and
+    /// written directly (see <see cref="FlushPendingSaveAsync"/>'s direct-write fallback).
+    /// If <paramref name="path"/> already lives inside the currently open folder, it is simply
+    /// selected there instead, keeping the vault (and its history, search, and assistant)
+    /// intact rather than discarding it for a file that already has all of that.</summary>
+    public async Task OpenFileAsync(string path)
+    {
+        if (Root is not null && RelativePath(path) is not null)
+        {
+            await SelectFileAsync(path);
+            return;
+        }
+
+        await FlushPendingSaveAsync(SelectedFile);
+        watcher?.Stop();
+        watcher = null;
+        vault?.Dispose();
+        vault = null;
+        ErrorMessage = null;
+
+        searchCts?.Cancel();
+        searchCts = null;
+        searchQuery = string.Empty;
+        Notify(nameof(SearchQuery));
+        Notify(nameof(IsSearchActive));
+        SearchHits.Clear();
+        IsSearching = false;
+
+        Root = null;
+        SelectedFile = path;
+        Notify(nameof(FolderName));
+        await LoadSelectedFileAsync();
+    }
+
+    /// <summary>Routes a dropped item to whichever open method fits it: a folder opens as a
+    /// vault, a Markdown file opens on its own. Anything else is reported, not silently
+    /// ignored — a drop that visibly did nothing reads as a bug. Mirrors Workspace.swift's
+    /// <c>open(dropped:)</c>.</summary>
+    public async Task OpenDroppedAsync(string path)
+    {
+        bool isDirectory;
+        try
+        {
+            isDirectory = File.GetAttributes(path).HasFlag(FileAttributes.Directory);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            ReportOpenFailure(error);
+            return;
+        }
+
+        if (isDirectory)
+        {
+            await OpenAsync(path);
+        }
+        else if (MarkdownFile.Matches(path))
+        {
+            await OpenFileAsync(path);
+        }
+        else
+        {
+            ReportOpenFailure(new UnsupportedDropException());
+        }
     }
 
     public async Task CloseFolderAsync()
@@ -340,22 +417,44 @@ internal sealed class Workspace : ObservableBase
 
     /// <summary>Writes the current buffer to <paramref name="url"/>, which may be a file we
     /// have just navigated away from — hence the explicit argument rather than reading
-    /// <see cref="SelectedFile"/>.</summary>
+    /// <see cref="SelectedFile"/>. First gives the WYSIWYG editor a chance to report a
+    /// debounced edit that has not reached <see cref="Text"/> yet, so a fast switch cannot
+    /// silently drop the last few keystrokes — see <see cref="FlushEditorPendingEdit"/>'s doc
+    /// comment. Assigning <see cref="Text"/> here reschedules autosave (see its setter), so the
+    /// cancellation below must run after this, not before — mirrors the ordering in
+    /// <c>Workspace.swift</c>'s <c>flushPendingSaveAsync(to:)</c> / <c>flushPendingSave(to:)</c>.</summary>
     private async Task FlushPendingSaveAsync(string? url)
     {
+        if (FlushEditorPendingEdit is { } flush && await flush() is { } flushed && flushed != Text)
+        {
+            Text = flushed;
+        }
+
         autosaveCts?.Cancel();
         autosaveCts = null;
 
-        if (!HasUnsavedChanges || url is null || RelativePath(url) is not { } relative)
+        if (!HasUnsavedChanges || url is null)
         {
             return;
         }
 
         string contents = Text;
+        string? relative = RelativePath(url);
         await vaultGate.WaitAsync();
         try
         {
-            await Task.Run(() => GetOrOpenVault().Write(relative, contents));
+            if (relative is not null)
+            {
+                await Task.Run(() => GetOrOpenVault().Write(relative, contents));
+            }
+            else
+            {
+                // No vault open at this URL — a single file with no folder (see
+                // OpenFileAsync) — so there is nothing to route through VaultStore. Write it
+                // directly instead.
+                await Task.Run(() => File.WriteAllText(url, contents, System.Text.Encoding.UTF8));
+            }
+
             HasUnsavedChanges = false;
             ErrorMessage = null;
         }
@@ -424,5 +523,15 @@ internal sealed class Workspace : ObservableBase
         {
             vaultGate.Release();
         }
+    }
+}
+
+/// <summary>Only Markdown files and folders can be opened by dropping; anything else is
+/// reported through the same error path a failed picker would use. Mirrors Workspace.swift's
+/// <c>UnsupportedDropError</c>.</summary>
+internal sealed class UnsupportedDropException : Exception
+{
+    public UnsupportedDropException() : base("Only folders and Markdown files can be opened here.")
+    {
     }
 }

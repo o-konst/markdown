@@ -5,7 +5,7 @@
 Two ways to point an AI agent at the notes vault:
 
 1. An **MCP server** so Claude Code / Claude Desktop can read, search, create, and edit the
- notes folder from outside the app.
+   notes folder from outside the app.
 2. An **in-app chat panel** driving the same operations from a Claude agent loop.
 
 Both reduce to the same thing — a trustworthy way to *mutate the vault* — so this is one
@@ -14,13 +14,13 @@ shared Rust core with thin front ends over it.
 Two constraints shape everything:
 
 - **The app cannot write anything today.** `Workspace` reads a file into `text` and stops:
-no save, no create, no delete, edits live only in memory. Neither feature is buildable
-until that exists. It is the riskiest part of this work, not a warm-up.
+  no save, no create, no delete, edits live only in memory. Neither feature is buildable
+  until that exists. It is the riskiest part of this work, not a warm-up.
 - **The project already has a cross-platform seam.** `MarkdownCore.cs` says it outright —
-*"Mirrors MarkdownCore.swift on macOS"* — two thin facades over one Rust library. Logic
-belongs in Rust or in the Vue app; the Swift and C# shells stay thin. An earlier draft of
-this plan put the vault in Swift, which would have meant a full C# rewrite plus a third
-copy of path confinement.
+  *"Mirrors MarkdownCore.swift on macOS"* — two thin facades over one Rust library. Logic
+  belongs in Rust or in the Vue app; the Swift and C# shells stay thin. An earlier draft of
+  this plan put the vault in Swift, which would have meant a full C# rewrite plus a third
+  copy of path confinement.
 
 Decisions: vault logic, MCP server, and agent loop all in **Rust**; chat panel in **Vue**,
 shared by both apps; agent writes **auto-apply with undo**; retrieval is **lexical search +
@@ -31,21 +31,19 @@ MCP resources**; the MCP server talks **straight to disk**.
 MIT-licensed, shipped at v4.6, Tauri 2 + Vue 3. It solves this exact problem, and every
 structural decision above independently matches what it ships:
 
-
-| This plan                            | SoloMD                                                                                                                          |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| MCP server in Rust + `rmcp`          | `solomd-mcp`, Rust + `rmcp`                                                                                                     |
-| Agent loop in Rust, not the web view | `agent_run.rs` / `agent_tools.rs` in the Tauri backend                                                                          |
-| Chat panel in the shared web UI      | Vue Agent Panel                                                                                                                 |
-| Keys in the OS keychain              | `ai_keystore.rs`                                                                                                                |
-| stdio, straight to disk              | stdio only, no network port                                                                                                     |
-| One path-confinement module          | `safety.rs::resolve_in` — near-identical, including the canonicalise-the-parent trick for writes to files that do not exist yet |
-
+| This plan | SoloMD |
+|---|---|
+| MCP server in Rust + `rmcp` | `solomd-mcp`, Rust + `rmcp` |
+| Agent loop in Rust, not the web view | `agent_run.rs` / `agent_tools.rs` in the Tauri backend |
+| Chat panel in the shared web UI | Vue Agent Panel |
+| Keys in the OS keychain | `ai_keystore.rs` |
+| stdio, straight to disk | stdio only, no network port |
+| One path-confinement module | `safety.rs::resolve_in` — near-identical, including the canonicalise-the-parent trick for writes to files that do not exist yet |
 
 Three things it does **better**, folded into the phases below: git instead of a bespoke
 journal, caps enforced before dispatch, and read-only as the default on the external
 surface. One thing it does more conservatively: its entire write surface is `write_note`,
-`append_to_note`, and `autogit_rollback` — **no delete, no move, no create\_folder**. Folders
+`append_to_note`, and `autogit_rollback` — **no delete, no move, no create_folder**. Folders
 are in scope here because you asked for them, so they carry the strictest gate.
 
 **Worth deciding before Phase 1:** `solomd-mcp` is MIT, standalone, and works on any
@@ -81,16 +79,14 @@ rust/
 New crate in the existing cargo workspace (`rust/Cargo.toml` `members`), linked into the
 current `markdown_core` FFI so both apps reach it through the facade pattern they have.
 
-
-| Module       | Responsibility                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `confine.rs` | **The security boundary.** Resolve → standardize → resolve symlinks → reject anything outside the root: `../` escapes, absolute paths, symlinks pointing out of the vault. One copy, exhaustively tested.                                                                                                                                                                                          |
-| `store.rs`   | `read`, `write`, `create_file`, `create_folder`, `move`, `delete`. Every mutation commits through `history.rs`, so `delete` is recoverable by revert and needs no `.trash/` of its own.                                                                                                                                                                                                            |
+| Module | Responsibility |
+|---|---|
+| `confine.rs` | **The security boundary.** Resolve → standardize → resolve symlinks → reject anything outside the root: `../` escapes, absolute paths, symlinks pointing out of the vault. One copy, exhaustively tested. |
+| `store.rs` | `read`, `write`, `create_file`, `create_folder`, `move`, `delete`. Every mutation commits through `history.rs`, so `delete` is recoverable by revert and needs no `.trash/` of its own. |
 | `history.rs` | **Git, not a bespoke journal.** Vendored `libgit2` (`git2`), a repo inside the vault, one commit per save and per agent write. Undo is `revert`; the chat panel's per-operation undo reverts one commit. Never auto-pushed. Replaces the hand-rolled journal + `.trash/` of the first draft: real diffs, crash-safe, and no custom format to get wrong — the mechanism SoloMD proved with AutoGit. |
-| `search.rs`  | Lexical ranking over names and contents, heading-anchored snippets. Port the caps already tuned in `FolderSearch.swift` (skip huge files, few snippets each, bounded results).                                                                                                                                                                                                                     |
-| `outline.rs` | Heading extraction and slugs matching `vue-project/src/composables/useDocumentOutline.ts`, so anchors line up with the preview.                                                                                                                                                                                                                                                                    |
-| `tools.rs`   | `tool_call(name, input_json) -> result_json` — one entry point shared by the MCP server and the agent, so adding a tool never touches Swift, C#, or the server.                                                                                                                                                                                                                                    |
-
+| `search.rs` | Lexical ranking over names and contents, heading-anchored snippets. Port the caps already tuned in `FolderSearch.swift` (skip huge files, few snippets each, bounded results). |
+| `outline.rs` | Heading extraction and slugs matching `vue-project/src/composables/useDocumentOutline.ts`, so anchors line up with the preview. |
+| `tools.rs` | `tool_call(name, input_json) -> result_json` — one entry point shared by the MCP server and the agent, so adding a tool never touches Swift, C#, or the server. |
 
 **FFI + facades:** extend `ffi.rs` and `include/markdown_core.h`; add a `VaultStore.swift`
 beside `MarkdownCore.swift` and a `VaultStore.cs` beside `MarkdownCore.cs`. JSON in, JSON
@@ -99,11 +95,10 @@ out — the marshalling `md_render` already does.
 **Sanitize the renderer** (see the security finding below) before anything can write.
 
 **App side, per platform and thin:**
-
 - Debounced autosave plus flush on file switch and quit. Required, not optional: without it
-an agent write and an unsaved buffer silently destroy each other.
+  an agent write and an unsaved buffer silently destroy each other.
 - A folder watcher (FSEvents / `ReadDirectoryChangesW`) refreshing `FileNode` and reloading
-the open file **only when the buffer is clean**; a dirty buffer is flagged, never clobbered.
+  the open file **only when the buffer is clean**; a dirty buffer is flagged, never clobbered.
 
 ---
 
@@ -111,7 +106,7 @@ the open file **only when the buffer is clean**; a dirty buffer is flagged, neve
 
 A second binary target in the workspace linking `markdown_vault` directly, so confinement
 and search stay at exactly one copy. `rmcp` is the official
-`modelcontextprotocol/rust-sdk` — v3.1.4, \~22M downloads, actively released.
+`modelcontextprotocol/rust-sdk` — v3.1.4, ~22M downloads, actively released.
 
 Ships as a **single static binary**: no runtime to bundle, and it cross-compiles for Windows
 with the toolchain this repo already uses for the WinUI `cdylib`. Registered in Claude
@@ -120,7 +115,7 @@ one-click install but is no longer required to carry a runtime.
 
 Vault root from `MARKDOWN_VAULT` or `--vault`.
 
-**Tools — one per action** (10, well under the \~15 threshold): `list_notes`, `read_note`,
+**Tools — one per action** (10, well under the ~15 threshold): `list_notes`, `read_note`,
 `search_notes`, `outline`, `create_note`, `edit_note` (targeted `old_text`/`new_text`
 replace — the default Claude should reach for), `write_note`, `create_folder`, `move`,
 `delete`. Annotate read-only vs `destructiveHint`; the connector review criteria require
@@ -153,13 +148,13 @@ Raw HTTP to `POST /v1/messages` — there is no Anthropic SDK for Rust or Swift,
 the documented raw-HTTP shape:
 
 - `model: "claude-opus-5"`, `thinking: {type: "adaptive"}` — **not** `budget_tokens`, which
-returns 400 on Opus 5
+  returns 400 on Opus 5
 - `output_config: {effort: "high"}`, `stream: true`, `max_tokens: 64000`
 - Server-side fallbacks by default: beta `server-side-fallback-2026-07-01` +
-`fallbacks: "default"`; check `stop_reason` before reading `content`, and handle
-`stop_reason: "refusal"` with its `stop_details.category`
+  `fallbacks: "default"`; check `stop_reason` before reading `content`, and handle
+  `stop_reason: "refusal"` with its `stop_details.category`
 - Prompt caching: stable system prompt and tool list first, volatile turns after the last
-`cache_control` breakpoint; confirm with `usage.cache_read_input_tokens`
+  `cache_control` breakpoint; confirm with `usage.cache_read_input_tokens`
 - No assistant prefill (400 on Opus 5)
 
 Manual `while stop_reason == "tool_use"` loop dispatching into `vault::tools`. Rules that
@@ -174,7 +169,7 @@ rewrite two hundred notes is stopped before the first one. A turn also refuses t
 dirty working tree, so agent commits never entangle with unsaved human edits. All three are
 SoloMD's defaults, and they cost almost nothing to implement.
 
-Each turn writes a `trace.jsonl` (prompt / model\_call / tool\_call / tool\_result / done) next
+Each turn writes a `trace.jsonl` (prompt / model_call / tool_call / tool_result / done) next
 to the run history — the thing that makes "why did it do that" answerable after the fact.
 
 **Event delivery — no callback ABI.** `md_agent_next_event(handle)` blocks and returns one
@@ -212,48 +207,47 @@ safe to add at all.
 ## Verification
 
 1. **Confinement first** — exhaustive Rust tests over `../`, absolute paths, symlinks out of
- the vault, and percent-encoded and unicode variants. The one place a bug is a security
- bug rather than a UX bug.
+   the vault, and percent-encoded and unicode variants. The one place a bug is a security
+   bug rather than a UX bug.
 2. **Sanitization** — Rust tests asserting `<script>`, `onerror=`, and `javascript:` hrefs
- do not survive `render_markdown`.
+   do not survive `render_markdown`.
 3. **MCP server** — `npx @modelcontextprotocol/inspector` (protocol-level over stdio, so
- language-agnostic) across every tool and resource, then a real Claude Code session
- against a scratch vault.
+   language-agnostic) across every tool and resource, then a real Claude Code session
+   against a scratch vault.
 4. **Agent loop without network** — a stub HTTP server replaying a canned transcript
- (text → parallel `tool_use` → `tool_result` → `end_turn`), so loop correctness, parallel
- dispatch, and `is_error` handling are testable without tokens or connectivity.
+   (text → parallel `tool_use` → `tool_result` → `end_turn`), so loop correctness, parallel
+   dispatch, and `is_error` handling are testable without tokens or connectivity.
 5. **Caps and undo** — Rust tests proving the write cap and loop cap refuse *before* any
- side effect, that a dirty tree blocks a turn, and that reverting an agent commit restores
- the exact prior bytes.
+   side effect, that a dirty tree blocks a turn, and that reverting an agent commit restores
+   the exact prior bytes.
 6. **End to end in the app** — the probe technique used throughout this session: temporary
- `NSLog` instrumentation driven from a `.task` against a fixture vault in the app
- container, covering tool dispatch, git undo, and watcher refresh; removed after.
+   `NSLog` instrumentation driven from a `.task` against a fixture vault in the app
+   container, covering tool dispatch, git undo, and watcher refresh; removed after.
 7. **All toolchains clean** — `cargo test` (workspace-wide), `npm run build`, `xcodebuild`.
 8. **Live-write smoke test** — edit a note from Claude Code with the app open; the tree and
- preview refresh, and a dirty buffer is left untouched.
+   preview refresh, and a dirty buffer is left untouched.
 
 ---
 
 ## Consequences worth accepting knowingly
 
 - **Auto-apply means a wrong tool call reaches disk before you see it.** Git history plus
-the pre-dispatch caps are what make that recoverable — load-bearing, not polish. If you
-later want approval instead, SoloMD's upgrade path is proven and needs no rework: run each
-turn on its own branch (`agent/<run-id>`), then **accept** = merge, **reject** = delete the
-branch and the run vanishes from history entirely.
+  the pre-dispatch caps are what make that recoverable — load-bearing, not polish. If you
+  later want approval instead, SoloMD's upgrade path is proven and needs no rework: run each
+  turn on its own branch (`agent/<run-id>`), then **accept** = merge, **reject** = delete the
+  branch and the run vanishes from history entirely.
 - **Adding a git repo to the vault is a real product decision**, not just an undo mechanism.
-It means a `.git` directory appears in the notes folder, and vaults already under git (or
-syncing through Dropbox/iCloud) need thinking about. Cheaper than a bespoke journal and far
-more capable, but not invisible.
+  It means a `.git` directory appears in the notes folder, and vaults already under git (or
+  syncing through Dropbox/iCloud) need thinking about. Cheaper than a bespoke journal and far
+  more capable, but not invisible.
 - **Streaming crosses the bridge**, the price of a chat panel both apps share. The bridge
-already pushes per-keystroke document updates, so the volume is not new.
+  already pushes per-keystroke document updates, so the volume is not new.
 - **Cost:** Opus 5 is $5 / $25 per MTok, and a chat that reads much of a vault adds up.
-Prompt caching and `effort` tuning are cheaper to build in now than to retrofit.
+  Prompt caching and `effort` tuning are cheaper to build in now than to retrofit.
 - **Windows gets everything except the shell.** WinUI needs a `VaultStore.cs` facade, a
-watcher, autosave, and a credential lookup. The vault, MCP server, agent loop, and chat
-panel are all shared.
+  watcher, autosave, and a credential lookup. The vault, MCP server, agent loop, and chat
+  panel are all shared.
 - **Rust is now the centre of gravity.** Four crates instead of one, and work that would
-have been Swift is Rust — a deliberate trade for writing the security boundary once.
+  have been Swift is Rust — a deliberate trade for writing the security boundary once.
 - **Scope.** Far larger than anything else in this session; Phase 0 rewrites how documents
-load and save. The phases are independently shippable and worth landing in order.
-
+  load and save. The phases are independently shippable and worth landing in order.

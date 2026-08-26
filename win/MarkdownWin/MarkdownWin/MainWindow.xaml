@@ -13,7 +13,13 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid RowSpacing="0">
+    <Grid
+        x:Name="RootGrid"
+        RowSpacing="0"
+        AllowDrop="True"
+        DragOver="OnRootDragOver"
+        DragLeave="OnRootDragLeave"
+        Drop="OnRootDrop">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -32,6 +38,11 @@
                     QueryIcon="Find"
                     TextChanged="OnSearchTextChanged" />
             </CommandBar.Content>
+            <AppBarButton Icon="Document" Label="Open File…" Click="OnOpenFileClick">
+                <AppBarButton.KeyboardAccelerators>
+                    <KeyboardAccelerator Modifiers="Control" Key="O" />
+                </AppBarButton.KeyboardAccelerators>
+            </AppBarButton>
             <AppBarButton Icon="Folder" Label="Open Folder…" Click="OnOpenFolderClick">
                 <AppBarButton.KeyboardAccelerators>
                     <KeyboardAccelerator Modifiers="Control,Shift" Key="O" />
@@ -39,7 +50,130 @@
             </AppBarButton>
             <AppBarButton x:Name="CloseFolderButton" Icon="ClosePane" Label="Close Folder" Click="OnCloseFolderClick" IsEnabled="False" />
             <AppBarSeparator />
-            <AppBarToggleButton x:Name="EditToggle" Icon="Edit" Label="Edit" Checked="OnEditToggleChanged" Unchecked="OnEditToggleChanged" ToolTipService.ToolTip="Edit the Markdown source">
+
+            <!--
+                The native WYSIWYG formatting toolbar. Every button dispatches a command string
+                (see vue-project/src/editor/formatCommands.ts) via Preview.RunEditorCommandAsync;
+                active/pressed/enabled state comes back the other way as an EditorToolbarState
+                (Preview.EditorStateChanged), applied in MainWindow.xaml.cs's ApplyToolbarState.
+                Mirrors macOS's EditorFormattingToolbar.swift. Table row/column controls are
+                deliberately NOT here — they stay as the existing in-content TableControls.vue,
+                contextual to being inside a table rather than a global toolbar concern. No
+                Underline button (not CommonMark/GFM — see the plan's Phase 6 rationale). No
+                Undo/Redo buttons (WebView2's contenteditable undo is expected to already work
+                via Ctrl+Z with focus in the web view; not verified interactively from this
+                environment, so nothing was wired speculatively).
+
+                AppBarToggleButton uses Click (not Checked/Unchecked) to fire commands: Click
+                only fires on real user interaction, not on the programmatic IsChecked
+                assignments ApplyToolbarState makes to reflect state pushed from the web view —
+                using Checked/Unchecked here would create a feedback loop.
+            -->
+            <AppBarToggleButton x:Name="ModeToggle" Label="Reading View" Click="OnModeToggleClick" ToolTipService.ToolTip="Switch to Reading view">
+                <AppBarToggleButton.Icon>
+                    <FontIcon x:Name="ModeToggleIcon" Glyph="&#xE890;" />
+                </AppBarToggleButton.Icon>
+            </AppBarToggleButton>
+            <AppBarSeparator />
+            <AppBarToggleButton x:Name="BoldButton" Icon="Bold" Label="Bold" Tag="toggleBold" Click="OnMarkOrBlockButtonClick" ToolTipService.ToolTip="Bold" LabelPosition="Collapsed" />
+            <AppBarToggleButton x:Name="ItalicButton" Icon="Italic" Label="Italic" Tag="toggleItalic" Click="OnMarkOrBlockButtonClick" ToolTipService.ToolTip="Italic" LabelPosition="Collapsed" />
+            <AppBarToggleButton x:Name="StrikeButton" Label="Strikethrough" Tag="toggleStrike" Click="OnMarkOrBlockButtonClick" ToolTipService.ToolTip="Strikethrough" LabelPosition="Collapsed">
+                <AppBarToggleButton.Icon>
+                    <FontIcon Glyph="&#xE8DE;" />
+                </AppBarToggleButton.Icon>
+            </AppBarToggleButton>
+            <AppBarToggleButton x:Name="CodeMarkButton" Label="Inline Code" Tag="toggleCode" Click="OnMarkOrBlockButtonClick" ToolTipService.ToolTip="Inline Code" LabelPosition="Collapsed">
+                <AppBarToggleButton.Icon>
+                    <FontIcon Glyph="&#xE943;" />
+                </AppBarToggleButton.Icon>
+            </AppBarToggleButton>
+            <AppBarButton x:Name="HeadingButton" Label="Text" ToolTipService.ToolTip="Heading level" LabelPosition="Default">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE8D2;" />
+                </AppBarButton.Icon>
+                <AppBarButton.Flyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem Text="Paragraph" Tag="0" Click="OnHeadingLevelClick" />
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem Text="Heading 1" Tag="1" Click="OnHeadingLevelClick" />
+                        <MenuFlyoutItem Text="Heading 2" Tag="2" Click="OnHeadingLevelClick" />
+                        <MenuFlyoutItem Text="Heading 3" Tag="3" Click="OnHeadingLevelClick" />
+                        <MenuFlyoutItem Text="Heading 4" Tag="4" Click="OnHeadingLevelClick" />
+                        <MenuFlyoutItem Text="Heading 5" Tag="5" Click="OnHeadingLevelClick" />
+                        <MenuFlyoutItem Text="Heading 6" Tag="6" Click="OnHeadingLevelClick" />
+                    </MenuFlyout>
+                </AppBarButton.Flyout>
+            </AppBarButton>
+            <AppBarSeparator />
+            <AppBarToggleButton x:Name="BlockquoteButton" Label="Blockquote" Tag="toggleBlockquote" Click="OnMarkOrBlockButtonClick" ToolTipService.ToolTip="Blockquote" LabelPosition="Collapsed">
+                <AppBarToggleButton.Icon>
+                    <FontIcon Glyph="&#xE1D8;" />
+                </AppBarToggleButton.Icon>
+            </AppBarToggleButton>
+            <AppBarToggleButton x:Name="BulletListButton" Icon="Bullets" Label="Bullet List" Tag="toggleBulletList" Click="OnMarkOrBlockButtonClick" ToolTipService.ToolTip="Bullet List" LabelPosition="Collapsed" />
+            <AppBarToggleButton x:Name="OrderedListButton" Icon="List" Label="Numbered List" Tag="toggleOrderedList" Click="OnMarkOrBlockButtonClick" ToolTipService.ToolTip="Numbered List" LabelPosition="Collapsed" />
+            <AppBarToggleButton x:Name="TaskListButton" Label="Task List" Tag="toggleTaskList" Click="OnMarkOrBlockButtonClick" ToolTipService.ToolTip="Task List" LabelPosition="Collapsed">
+                <AppBarToggleButton.Icon>
+                    <FontIcon Glyph="&#xE9D5;" />
+                </AppBarToggleButton.Icon>
+            </AppBarToggleButton>
+            <AppBarToggleButton x:Name="CodeBlockButton" Label="Code Block" Tag="toggleCodeBlock" Click="OnMarkOrBlockButtonClick" ToolTipService.ToolTip="Code Block" LabelPosition="Collapsed">
+                <AppBarToggleButton.Icon>
+                    <FontIcon Glyph="&#xE943;" />
+                </AppBarToggleButton.Icon>
+            </AppBarToggleButton>
+            <AppBarSeparator />
+            <AppBarButton x:Name="HorizontalRuleButton" Label="Horizontal Rule" Click="OnHorizontalRuleClick" ToolTipService.ToolTip="Insert a horizontal rule" LabelPosition="Collapsed">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE738;" />
+                </AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Name="LinkButton" Icon="Link" Label="Link" ToolTipService.ToolTip="Link" LabelPosition="Collapsed">
+                <AppBarButton.Flyout>
+                    <Flyout x:Name="LinkFlyout" Opening="OnLinkFlyoutOpening">
+                        <StackPanel Spacing="8" Width="260">
+                            <TextBlock Text="Link URL" FontWeight="SemiBold" />
+                            <TextBox x:Name="LinkUrlBox" PlaceholderText="https://example.com" KeyDown="OnLinkUrlKeyDown" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                <Button x:Name="RemoveLinkButton" Content="Remove" Click="OnRemoveLinkClick" />
+                                <Button Content="Apply" Click="OnApplyLinkClick" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Flyout>
+                </AppBarButton.Flyout>
+            </AppBarButton>
+            <AppBarButton x:Name="ImageButton" Icon="Pictures" Label="Image" ToolTipService.ToolTip="Insert an image from a URL" LabelPosition="Collapsed">
+                <AppBarButton.Flyout>
+                    <Flyout Opening="OnImageFlyoutOpening">
+                        <StackPanel Spacing="8" Width="260">
+                            <TextBlock Text="Image URL" FontWeight="SemiBold" />
+                            <TextBox x:Name="ImageUrlBox" PlaceholderText="https://example.com/image.png" KeyDown="OnImageUrlKeyDown" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                <Button Content="Insert" Click="OnApplyImageClick" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Flyout>
+                </AppBarButton.Flyout>
+            </AppBarButton>
+            <AppBarButton x:Name="FootnoteButton" Label="Footnote" ToolTipService.ToolTip="Insert a footnote" LabelPosition="Default">
+                <AppBarButton.Icon>
+                    <FontIcon Glyph="&#xE8FE;" />
+                </AppBarButton.Icon>
+                <AppBarButton.Flyout>
+                    <Flyout Opening="OnFootnoteFlyoutOpening">
+                        <StackPanel Spacing="8" Width="220">
+                            <TextBlock Text="Footnote Label" FontWeight="SemiBold" />
+                            <TextBox x:Name="FootnoteLabelBox" PlaceholderText="note" KeyDown="OnFootnoteLabelKeyDown" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                <Button Content="Insert" Click="OnApplyFootnoteClick" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Flyout>
+                </AppBarButton.Flyout>
+            </AppBarButton>
+            <AppBarSeparator />
+
+            <AppBarToggleButton x:Name="EditToggle" Icon="Edit" Label="Source" Checked="OnEditToggleChanged" Unchecked="OnEditToggleChanged" ToolTipService.ToolTip="Show the raw Markdown source">
                 <AppBarToggleButton.KeyboardAccelerators>
                     <KeyboardAccelerator Modifiers="Control" Key="E" />
                 </AppBarToggleButton.KeyboardAccelerators>
@@ -77,5 +211,18 @@
                     TextChanged="OnEditorTextChanged" />
             </Grid>
         </Grid>
+
+        <!-- Shown while a folder/file is being dragged over the window; mirrors ContentView.swift's
+             isDropTargeted overlay. IsHitTestVisible="False" so it never intercepts the drag/drop
+             events themselves, which are handled by RootGrid underneath it. -->
+        <Border
+            x:Name="DropHighlight"
+            Grid.RowSpan="2"
+            Margin="6"
+            CornerRadius="12"
+            BorderThickness="3"
+            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+            IsHitTestVisible="False"
+            Visibility="Collapsed" />
     </Grid>
 </Window>

@@ -19,6 +19,24 @@ subsystem doc; start with `architecture.md` for the big picture.
   handling, write/loop caps, and known open gaps.
 - **[build-and-development.md](build-and-development.md)** — how to build, run, and
   test every piece, plus the non-obvious build-script workarounds.
+- **[live-preview-editing-research.md](live-preview-editing-research.md)** — research and
+  a candidate design for Typora/Obsidian-style WYSIWYG editing inside the embedded Vue
+  WebView. **Proposed future work, not implemented** — unlike the docs above, this
+  describes a design, not current code state.
+- **[jotty-editor-research.md](jotty-editor-research.md)** — prior-art deep-dive into
+  `github.com/fccview/jotty`'s Tiptap-based editor, used to stress-test the design above.
+  **External research, not this repo's code.**
+- **[marktext-muya-research.md](marktext-muya-research.md)** — prior-art deep-dive into
+  MarkText's from-scratch `@muyajs/core` editor engine (the flagship open-source
+  Typora-style editor), used to stress-test the same design. **External research, not
+  this repo's code.**
+- **[tiptap-research.md](tiptap-research.md)** — deep-dive into Tiptap itself (the chosen
+  editor library), which surfaced a first-party `@tiptap/markdown` package that changed
+  the live-preview design's parser/serializer approach. **External research, not this
+  repo's code.**
+- **[quill-research.md](quill-research.md)** — "why not Quill" check on an alternative
+  editor architecture (Delta ops + Blots); confirms staying with Tiptap. **External
+  research, not this repo's code.**
 
 For AI-assistant-driven work in this repo, also see `.claude/plans/ai-assistant-mcp-and-chat.md`
 (the original design plan) and the root `CLAUDE.md`. Most of that plan is now implemented;
