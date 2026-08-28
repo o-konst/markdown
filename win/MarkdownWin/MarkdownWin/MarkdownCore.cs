@@ -44,6 +44,10 @@ internal static class MarkdownCore
         [MarshalAs(UnmanagedType.LPUTF8Str)] string path,
         out MdAsset asset);
 
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static extern bool md_asset_exists([MarshalAs(UnmanagedType.LPUTF8Str)] string path);
+
     #region Vault FFI
 
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
@@ -243,4 +247,13 @@ internal static class MarkdownCore
         Marshal.Copy(asset.Data, data, 0, data.Length);
         return new WebAsset(data, Marshal.PtrToStringUTF8(asset.Mime) ?? "application/octet-stream");
     }
+
+    /// <summary>
+    /// Whether <paramref name="path"/> matches a real embedded web UI file exactly — unlike
+    /// <see cref="Asset"/>, without its single-page-app fallback to <c>index.html</c>. Use
+    /// this, not <see cref="Asset"/>, to tell "this is a genuine embedded UI route" apart from
+    /// "nothing here" — <see cref="Asset"/> would otherwise always report success (as
+    /// <c>index.html</c>) for literally any path.
+    /// </summary>
+    public static bool AssetExists(string path) => IsAvailable && md_asset_exists(path);
 }

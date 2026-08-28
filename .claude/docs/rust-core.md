@@ -313,6 +313,21 @@ pulls straight from `markdown_vault::TOOLS`/`schema`). Every schema has
 | `move` | ❌ | ✅ | `{from, to}` | `{commit, changed}` |
 | `delete` | ❌ | ✅ | `{path}` | `{commit, changed}` |
 | `undo` | ❌ | — | `{commit}` | `{commit}` |
+| `import_asset` | ❌ | — | `{filename, content_base64}` | `{path, mime, commit, changed}` |
+| `read_asset` | ✅ | — | `{path}` | `{content_base64, mime}` |
+
+`import_asset` (`store.rs`) copies bytes into `assets/` under a name derived from
+`filename`: reduced to its basename (no directory components honoured — a drop/paste
+target, not a path), whitespace characters replaced with `_` via `sanitize_filename`
+(inserted into a Markdown link verbatim, so a raw space would need URL-escaping the
+editor doesn't do), then de-collided with a numeric suffix (`photo.png` → `photo-1.png`)
+rather than clobbering or failing. Capped at `MAX_ASSET_BYTES` (25 MiB). `read_asset` is
+the binary counterpart to `read_note` (`fs::read`, not `read_to_string`, so it also
+serves images/PDFs/other binary attachments) — used both by the WebView's asset-serving
+fallback (an `<img>` tag inside a rendered note) and, on macOS, directly by
+`VaultStore.readAsset` for drag-drop import round-trips. Neither is scoped to `assets/`
+on the read side — `read_asset` can read any vault-relative path, same confinement as
+every other tool.
 
 (`committed()` returns `{"changed": false}` for a no-op write, or `{"commit": "<git
 oid>", "changed": true}` for an actual change, so callers/models can tell "nothing needed

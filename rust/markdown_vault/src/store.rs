@@ -15,11 +15,70 @@ use crate::history::{History, HistoryError};
 /// File kinds the vault surfaces. Everything else is invisible to every front end.
 pub const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd", "mdx", "text", "txt"];
 
+/// Where dropped/pasted files land. A single flat folder, not per-note, so the mental model
+/// stays "one assets folder" the way the user asked for it.
+pub const ASSETS_DIR: &str = "assets";
+
+/// Caps a base64-JSON round trip (over the FFI bridge, then the native app's own WebView
+/// bridge) from ballooning on a large file. 25 MiB is generous for a note attachment while
+/// keeping the inflated base64 payload (~33 MiB) well under any of those layers' limits.
+pub const MAX_ASSET_BYTES: usize = 25 * 1024 * 1024;
+
 pub fn is_markdown(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
         .map(|ext| MARKDOWN_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
         .unwrap_or(false)
+}
+
+/// A best-effort MIME type from a file's extension, for a caller deciding how to render or
+/// serve an asset (e.g. whether to embed it as an image). Unknown extensions fall back to a
+/// generic binary type rather than guessing.
+pub fn mime_for(name: &str) -> &'static str {
+    let ext = Path::new(name)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        "pdf" => "application/pdf",
+        "txt" => "text/plain",
+        "csv" => "text/csv",
+        "json" => "application/json",
+        "zip" => "application/zip",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "mp4" => "video/mp4",
+        "mov" => "video/quicktime",
+        _ => "application/octet-stream",
+    }
+}
+
+/// Splits a file name into a stem and extension for collision-suffixing (`photo` + `png`, so
+/// a retry becomes `photo-1.png`). A name with no dot, or one that starts with a dot and has
+/// no other dot (`.gitignore`), keeps its extension empty rather than treating the whole name
+/// as one.
+fn split_stem_ext(name: &str) -> (&str, &str) {
+    match name.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() => (stem, ext),
+        _ => (name, ""),
+    }
+}
+
+/// Replaces every whitespace character in a proposed file name with `_` — an imported asset's
+/// path is inserted straight into a Markdown link (see `import_asset`), and a raw space there
+/// needs URL-escaping to stay a valid link, which the editor doesn't do.
+fn sanitize_filename(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_whitespace() { '_' } else { c })
+        .collect()
 }
 
 #[derive(Debug)]
@@ -37,6 +96,8 @@ pub enum VaultError {
     NoMatch(String),
     /// An edit's `old_text` appears more than once, so the intended target is unknown.
     AmbiguousMatch(usize),
+    /// An imported asset's content exceeded [`MAX_ASSET_BYTES`].
+    TooLarge(usize),
 }
 
 impl std::fmt::Display for VaultError {
@@ -53,6 +114,10 @@ impl std::fmt::Display for VaultError {
                 f,
                 "the text to replace appears {count} times; include enough surrounding text to \
                  identify one of them"
+            ),
+            Self::TooLarge(size) => write!(
+                f,
+                "file is {size} bytes, which exceeds the {MAX_ASSET_BYTES}-byte import limit"
             ),
         }
     }
@@ -263,6 +328,63 @@ impl Vault {
     /// Undoes a change by its commit id.
     pub fn undo(&self, commit_id: &str) -> Result<String, VaultError> {
         Ok(self.history.revert(commit_id)?)
+    }
+
+    /// Copies `bytes` into [`ASSETS_DIR`] under a name derived from `filename`, picking a
+    /// collision-free variant (`name-1.ext`, `name-2.ext`, ...) rather than clobbering or
+    /// failing. Returns the vault-relative path actually used.
+    ///
+    /// `filename` is reduced to its base name first — this is a drop/paste target, not a
+    /// path, so any directory components in what the OS handed us are not honoured.
+    pub fn import_asset(
+        &self,
+        filename: &str,
+        bytes: &[u8],
+    ) -> Result<(String, Option<String>), VaultError> {
+        if bytes.len() > MAX_ASSET_BYTES {
+            return Err(VaultError::TooLarge(bytes.len()));
+        }
+        let base_name = Path::new(filename)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.is_empty())
+            .ok_or(VaultError::Path(ConfineError::Empty))?;
+        let base_name = sanitize_filename(base_name);
+        let (stem, ext) = split_stem_ext(&base_name);
+
+        let mut candidate = base_name.clone();
+        let mut suffix = 0u32;
+        let resolved = loop {
+            let target = format!("{ASSETS_DIR}/{candidate}");
+            let resolved = self.resolve_for_create(&target)?;
+            if !resolved.exists() {
+                break resolved;
+            }
+            suffix += 1;
+            candidate = if ext.is_empty() {
+                format!("{stem}-{suffix}")
+            } else {
+                format!("{stem}-{suffix}.{ext}")
+            };
+        };
+
+        if let Some(parent) = resolved.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&resolved, bytes)?;
+        let relative = self.relative(&resolved);
+        let commit = self.history.commit_all(&format!("Import {relative}"))?;
+        Ok((relative, commit))
+    }
+
+    /// Reads the raw bytes of any vault file — unlike [`Self::read`], not restricted to
+    /// valid UTF-8, so it also serves images and other binary attachments.
+    pub fn read_asset(&self, path: &str) -> Result<Vec<u8>, VaultError> {
+        let resolved = resolve_in(&self.root, path, true)?;
+        if resolved.is_dir() {
+            return Err(VaultError::WrongKind(path.to_owned()));
+        }
+        Ok(fs::read(&resolved)?)
     }
 
     // MARK: - Helpers
@@ -514,5 +636,96 @@ mod tests {
         let (dir, vault) = vault();
         assert!(vault.delete(".").is_err());
         assert!(dir.path().join("top.md").exists());
+    }
+
+    // MARK: - Asset import/read
+
+    #[test]
+    fn imports_an_asset_into_the_assets_folder() {
+        let (_dir, vault) = vault();
+        let (path, commit) = vault.import_asset("photo.png", b"pngbytes").unwrap();
+        assert_eq!(path, "assets/photo.png");
+        assert!(commit.is_some());
+        assert_eq!(vault.read_asset(&path).unwrap(), b"pngbytes");
+    }
+
+    #[test]
+    fn import_asset_creates_the_assets_folder_if_missing() {
+        let (dir, vault) = vault();
+        assert!(!dir.path().join("assets").exists());
+        vault.import_asset("a.png", b"x").unwrap();
+        assert!(dir.path().join("assets").is_dir());
+    }
+
+    #[test]
+    fn import_asset_avoids_a_collision_rather_than_clobbering() {
+        let (_dir, vault) = vault();
+        let (first, _) = vault.import_asset("photo.png", b"one").unwrap();
+        let (second, _) = vault.import_asset("photo.png", b"two").unwrap();
+        assert_eq!(first, "assets/photo.png");
+        assert_eq!(second, "assets/photo-1.png");
+        assert_eq!(vault.read_asset(&first).unwrap(), b"one");
+        assert_eq!(vault.read_asset(&second).unwrap(), b"two");
+
+        let (third, _) = vault.import_asset("photo.png", b"three").unwrap();
+        assert_eq!(third, "assets/photo-2.png");
+    }
+
+    #[test]
+    fn import_asset_collision_suffix_works_without_an_extension() {
+        let (_dir, vault) = vault();
+        let (first, _) = vault.import_asset("README", b"one").unwrap();
+        let (second, _) = vault.import_asset("README", b"two").unwrap();
+        assert_eq!(first, "assets/README");
+        assert_eq!(second, "assets/README-1");
+    }
+
+    #[test]
+    fn import_asset_takes_only_the_base_name_of_a_suggested_filename() {
+        let (dir, vault) = vault();
+        let (path, _) = vault.import_asset("../../evil.png", b"x").unwrap();
+        assert_eq!(path, "assets/evil.png");
+        // Nothing was ever written outside the vault along the way.
+        assert!(!dir.path().parent().unwrap().join("evil.png").exists());
+    }
+
+    #[test]
+    fn import_asset_replaces_whitespace_in_the_file_name_with_underscores() {
+        let (_dir, vault) = vault();
+        let (path, _) = vault.import_asset("my photo (3).png", b"x").unwrap();
+        assert_eq!(path, "assets/my_photo_(3).png");
+    }
+
+    #[test]
+    fn import_asset_refuses_content_over_the_size_cap() {
+        let (_dir, vault) = vault();
+        let oversized = vec![0u8; MAX_ASSET_BYTES + 1];
+        assert!(matches!(
+            vault.import_asset("big.bin", &oversized),
+            Err(VaultError::TooLarge(_))
+        ));
+    }
+
+    #[test]
+    fn import_asset_round_trips_binary_content_byte_for_byte() {
+        let (_dir, vault) = vault();
+        let bytes: Vec<u8> = (0u8..=255).collect();
+        let (path, _) = vault.import_asset("raw.bin", &bytes).unwrap();
+        assert_eq!(vault.read_asset(&path).unwrap(), bytes);
+    }
+
+    #[test]
+    fn read_asset_confinement_refuses_to_escape() {
+        let (_dir, vault) = vault();
+        assert!(vault.read_asset("../escaped.png").is_err());
+    }
+
+    #[test]
+    fn mime_for_known_and_unknown_extensions() {
+        assert_eq!(mime_for("photo.PNG"), "image/png");
+        assert_eq!(mime_for("photo.jpeg"), "image/jpeg");
+        assert_eq!(mime_for("report.pdf"), "application/pdf");
+        assert_eq!(mime_for("no-extension"), "application/octet-stream");
+        assert_eq!(mime_for("archive.tar.gz"), "application/octet-stream");
     }
 }

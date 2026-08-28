@@ -104,16 +104,34 @@ This is the trade the design plan explicitly accepted in exchange for auto-apply
 
 **Gap**: the macOS chat UI doesn't currently expose an Undo action, even though every
 tool-result event carries the commit id needed to call `VaultStore.undo(commit:)`
-(`macos-app.md` §5, §9).
+(`macos-app.md` §6, §10).
 
 ## 6. App-level sandboxing
 
-**macOS**: no `.entitlements` file exists anywhere under `macos/`, and no
-`CODE_SIGN_ENTITLEMENTS` build setting is present — the app is **not currently sandboxed**
-despite `rust/README.md` describing sandboxing as a target state (it references needing
-`com.apple.security.network.client` so WebKit's helper processes don't crash). This
-matters for eventual Mac App Store distribution and is worth resolving deliberately rather
-than by accident (`macos-app.md` §8–9).
+**macOS**: the app **is sandboxed**. Before 2026-08-28 this was done entirely through
+declarative Xcode 16+ build settings (`ENABLE_APP_SANDBOX = YES`,
+`ENABLE_USER_SELECTED_FILES = readwrite`, `ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES` in
+`Markdown.xcodeproj/project.pbxproj`) with **no `.entitlements` file on disk at all** —
+Xcode synthesizes the entitlements at sign time, which is why an earlier pass of this doc
+(and a plain `find -iname "*.entitlements"`) concluded there was no sandboxing; the
+synthesized result is only visible via `codesign -d --entitlements - Markdown.app`, which
+showed `com.apple.security.app-sandbox`, `.files.user-selected.read-write`, and
+`.network.client` all `true`. As of 2026-08-28 there is also an explicit
+`macos/Markdown/Markdown/Markdown.entitlements` (via `CODE_SIGN_ENTITLEMENTS` in both
+build configs), added to support the Recent Vaults feature
+(`.claude/plans/recent-vaults-plan.md`): it adds
+`com.apple.security.files.bookmarks.app-scope` (required to resolve a security-scoped
+bookmark in a *later* launch — without it, a sandboxed app's persisted bookmarks can't
+actually be reopened after quitting) and `com.apple.security.application-groups`
+(`group.com.ogay.webviewtest.Markdown`, used by `RecentVaultsStore` so the same recent-
+vaults list could later be read by another target — a Share Extension, widget, or the MCP
+server sidecar — none of which exist yet). `rust/README.md`'s assumption of eventual
+sandboxing is therefore already true, not just a target state.
+
+**Given this, revisit `security.md` §1's `solomd-mcp` vendored server** the next time
+sandboxing-sensitive behavior changes here — it has its own independent confinement logic
+and was vendored/built assuming no sandbox constraints applied to the host app; that
+assumption should be re-checked now that the sandbox is confirmed active.
 
 **Windows**: `Package.appxmanifest` declares `runFullTrust` (broad access, no itemized
 capabilities needed) plus an unused `systemAIModels` capability. No sandboxing model
@@ -126,8 +144,11 @@ but worth knowing if MSIX Store packaging is ever pursued.
    `solomd-mcp`'s `safety.rs`) — unconverged, unverified for parity. (§1)
 2. **No client-side HTML sanitization backstop** in the Vue preview — currently fine
    because Rust sanitizes, but a single point of failure. (§2)
-3. **No macOS app sandbox entitlements**, contradicting assumptions in `rust/README.md`.
-   (§6)
+3. **The macOS app has been sandboxed since before this doc's last full pass** (previously
+   reported here as not sandboxed — that was stale; declarative build settings synthesize
+   the entitlements with no `.entitlements` file needed, which is what hid it from a plain
+   file search). Confirm `solomd-mcp`'s own confinement logic still behaves correctly
+   under this sandbox — it wasn't necessarily designed assuming one. (§6)
 4. **No Undo affordance in the chat UI**, despite the data needed for it already flowing
    through. (§5)
 5. **No Windows credential storage or write/agent safety surface at all** — not a

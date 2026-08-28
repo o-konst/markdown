@@ -94,6 +94,13 @@ type HostRequest =
   | { method: 'outlineState'; available: boolean }
   | { method: 'documentEdit'; text: string }
   | { method: 'editorStateChanged'; state: EditorToolbarState }
+  | { method: 'importAsset'; filename: string; contentBase64: string }
+
+/** Reply to an `importAsset` request — where the file landed, and its detected MIME type. */
+export interface ImportedAsset {
+  path: string
+  mime: string
+}
 
 /**
  * Methods the host calls on the web UI. Each is installed by its own subscriber, so all
@@ -245,6 +252,17 @@ export async function reportEditorState(state: EditorToolbarState): Promise<void
   } catch {
     // Host predates the formatting toolbar; it has nothing to receive this into.
   }
+}
+
+/**
+ * Copies a dropped/pasted file's content into the vault's `assets` folder (see
+ * `markdown_vault`'s `import_asset` tool), returning the vault-relative path it landed at
+ * and its detected MIME type. Unlike the ack-only `report*` calls above, the caller needs
+ * this result (or its rejection) to decide what to insert into the document — so, like
+ * {@link render}, this does not swallow errors or gate on {@link isNativeHost}.
+ */
+export function importAsset(filename: string, contentBase64: string): Promise<ImportedAsset> {
+  return send<ImportedAsset>({ method: 'importAsset', filename, contentBase64 })
 }
 
 /**

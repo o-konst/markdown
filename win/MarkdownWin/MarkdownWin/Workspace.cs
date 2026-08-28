@@ -31,6 +31,13 @@ internal sealed class Workspace : ObservableBase
 {
     public const string UntitledText = "Hello, world!";
 
+    /// <summary>Unlike <c>Encoding.UTF8</c>, throws instead of silently substituting U+FFFD
+    /// for invalid bytes — now that the sidebar tree lists every file (not just Markdown
+    /// ones, see FileNode.cs), a click on a binary asset must fail loudly rather than load
+    /// mangled text that autosave could then write back over the original bytes.</summary>
+    private static readonly System.Text.UTF8Encoding StrictUtf8 = new(
+        encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
     private readonly SemaphoreSlim vaultGate = new(1, 1);
 
     private FileNode? root;
@@ -469,6 +476,55 @@ internal sealed class Workspace : ObservableBase
         }
     }
 
+    /// <summary>Copies <paramref name="data"/> into the vault's `assets` folder, opening (and,
+    /// if this is the very first write anywhere in the folder, baselining) the vault the same
+    /// way any other first edit would — see <see cref="GetOrOpenVault"/>. Throws if there is no
+    /// open folder to import into (e.g. a single file opened with no vault).</summary>
+    public async Task<(string Path, string Mime)> ImportAssetAsync(string filename, byte[] data)
+    {
+        await vaultGate.WaitAsync();
+        try
+        {
+            return await Task.Run(() => GetOrOpenVault().ImportAsset(filename, data));
+        }
+        finally
+        {
+            vaultGate.Release();
+        }
+    }
+
+    /// <summary>Reads a vault file's raw bytes, for the web view's asset-serving fallback
+    /// (e.g. an inline image dropped into a note). Null on any failure — including "no folder
+    /// is open" — so a scheme-handler miss just 404s rather than surfacing an error.
+    ///
+    /// Opens the vault on demand like <see cref="ImportAssetAsync"/> above: rendering a note
+    /// that references an asset can now cause the vault's first-open baseline commit to happen
+    /// a little earlier than an actual edit would have. Accepted trade-off, mirroring
+    /// Workspace.swift's identical note — an asset reference can only exist in a note because
+    /// something already imported it through this same vault.</summary>
+    public async Task<(byte[] Data, string Mime)?> ReadAssetAsync(string path)
+    {
+        await vaultGate.WaitAsync();
+        try
+        {
+            return await Task.Run(() =>
+            {
+                try
+                {
+                    return ((byte[] Data, string Mime)?)GetOrOpenVault().ReadAsset(path);
+                }
+                catch (VaultException)
+                {
+                    return null;
+                }
+            });
+        }
+        finally
+        {
+            vaultGate.Release();
+        }
+    }
+
     /// <summary>Opens the vault on demand. See <see cref="vault"/> for why this is not done
     /// when the folder opens.</summary>
     private VaultStore GetOrOpenVault()
@@ -508,7 +564,7 @@ internal sealed class Workspace : ObservableBase
         await vaultGate.WaitAsync();
         try
         {
-            Text = await Task.Run(() => File.ReadAllText(url, System.Text.Encoding.UTF8));
+            Text = await Task.Run(() => File.ReadAllText(url, StrictUtf8));
             // Assigning Text scheduled a save; the file is what is on disk, so cancel it.
             autosaveCts?.Cancel();
             autosaveCts = null;
@@ -518,6 +574,10 @@ internal sealed class Workspace : ObservableBase
         catch (IOException error)
         {
             ErrorMessage = $"Could not read {Path.GetFileName(url)}: {error.Message}";
+        }
+        catch (System.Text.DecoderFallbackException)
+        {
+            ErrorMessage = $"Could not read {Path.GetFileName(url)}: not a text file.";
         }
         finally
         {

@@ -8,10 +8,12 @@
 //! Schemas carry `additionalProperties: false` and explicit `required` lists so they can be
 //! used for strict tool use without further massaging.
 
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine as _;
 use serde_json::{json, Value};
 
 use crate::search::search;
-use crate::store::{Vault, VaultError};
+use crate::store::{mime_for, Vault, VaultError};
 
 /// What a caller needs to know to expose a tool, beyond its schema.
 pub struct ToolSpec {
@@ -105,6 +107,23 @@ pub const TOOLS: &[ToolSpec] = &[
         read_only: false,
         destructive: false,
     },
+    ToolSpec {
+        name: "import_asset",
+        description: "Copy base64-encoded file content (an image or other attachment) into \
+                      the vault's `assets` folder, choosing a collision-free name derived \
+                      from the given file name rather than overwriting anything. Returns the \
+                      vault-relative path to link or embed in a note.",
+        read_only: false,
+        destructive: false,
+    },
+    ToolSpec {
+        name: "read_asset",
+        description: "Read the raw bytes of a vault file as base64 — for images and other \
+                      binary attachments that `read_note` cannot handle, since that requires \
+                      valid UTF-8 text.",
+        read_only: true,
+        destructive: false,
+    },
 ];
 
 pub fn spec(name: &str) -> Option<&'static ToolSpec> {
@@ -156,6 +175,18 @@ pub fn schema(name: &str) -> Option<Value> {
         ),
         "delete" => object(json!({ "path": string("Vault-relative note or folder to delete.") }), &["path"]),
         "undo" => object(json!({ "commit": string("Commit id returned by an earlier change.") }), &["commit"]),
+        "import_asset" => object(
+            json!({
+                "filename": string(
+                    "Suggested file name, including extension. The name may be changed to \
+                     avoid colliding with an existing file; only the extension is preserved \
+                     as given."
+                ),
+                "content_base64": string("The file's contents, base64-encoded.")
+            }),
+            &["filename", "content_base64"],
+        ),
+        "read_asset" => object(json!({ "path": string("Vault-relative path to the file.") }), &["path"]),
         _ => return None,
     };
     Some(schema)
@@ -212,6 +243,24 @@ pub fn call(vault: &Vault, name: &str, input: &Value) -> Result<Value, String> {
             let commit = required_str(input, "commit")?;
             let id = vault.undo(commit).map_err(describe)?;
             Ok(json!({ "commit": id }))
+        }
+        "import_asset" => {
+            let filename = required_str(input, "filename")?;
+            let content_base64 = required_str(input, "content_base64")?;
+            let bytes = BASE64
+                .decode(content_base64)
+                .map_err(|err| format!("`content_base64` is not valid base64: {err}"))?;
+            let (path, commit) = vault.import_asset(filename, &bytes).map_err(describe)?;
+            let mime = mime_for(&path);
+            match commit {
+                Some(commit) => Ok(json!({ "path": path, "mime": mime, "commit": commit, "changed": true })),
+                None => Ok(json!({ "path": path, "mime": mime, "changed": false })),
+            }
+        }
+        "read_asset" => {
+            let path = required_str(input, "path")?;
+            let bytes = vault.read_asset(path).map_err(describe)?;
+            Ok(json!({ "content_base64": BASE64.encode(bytes), "mime": mime_for(path) }))
         }
         other => Err(format!("unknown tool `{other}`")),
     }
@@ -394,9 +443,46 @@ mod tests {
             ("delete", json!({ "path": "../escaped.md" })),
             ("move", json!({ "from": "top.md", "to": "../escaped.md" })),
             ("outline", json!({ "path": "../escaped.md" })),
+            ("read_asset", json!({ "path": "../escaped.md" })),
         ] {
             assert!(call(&vault, tool, &input).is_err(), "{tool} allowed an escape");
         }
         assert!(!escaped.exists(), "a tool wrote outside the vault");
+    }
+
+    #[test]
+    fn imports_and_reads_an_asset_through_the_tool_layer() {
+        use base64::Engine as _;
+
+        let (_dir, vault) = vault();
+        let content_base64 = base64::engine::general_purpose::STANDARD.encode(b"pngbytes");
+        let imported = call(
+            &vault,
+            "import_asset",
+            &json!({ "filename": "photo.png", "content_base64": content_base64 }),
+        )
+        .unwrap();
+        assert_eq!(imported["path"], "assets/photo.png");
+        assert_eq!(imported["mime"], "image/png");
+        assert_eq!(imported["changed"], json!(true));
+
+        let read = call(&vault, "read_asset", &json!({ "path": "assets/photo.png" })).unwrap();
+        assert_eq!(read["mime"], "image/png");
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(read["content_base64"].as_str().unwrap())
+            .unwrap();
+        assert_eq!(decoded, b"pngbytes");
+    }
+
+    #[test]
+    fn import_asset_rejects_invalid_base64_without_panicking() {
+        let (_dir, vault) = vault();
+        let err = call(
+            &vault,
+            "import_asset",
+            &json!({ "filename": "photo.png", "content_base64": "not base64!!" }),
+        )
+        .unwrap_err();
+        assert!(err.contains("not valid base64"), "{err}");
     }
 }

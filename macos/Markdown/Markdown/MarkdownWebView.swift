@@ -59,13 +59,33 @@ struct MarkdownWebView {
     /// way but for a purely UI-local concern.
     var registerRunEditorCommand: (@escaping (String, [String: Any]?) async -> Bool) -> Void
 
+    /// Copies a dropped/pasted file's bytes into the vault's `assets` folder — backs the
+    /// `"importAsset"` bridge case. Throws (surfaced to JS as a bridge error) if there is no
+    /// open folder to import into. See `.claude/plans/drag-drop-attachments-plan.md`.
+    var importAsset: (_ filename: String, _ data: Data) throws -> (path: String, mime: String)
+
+    /// Reads a vault file's raw bytes, used by the URL scheme handler's asset-serving
+    /// fallback (e.g. an inline image a note references under `assets/`). `nil` on any
+    /// failure — including no open folder — so a miss here just 404s like any other unknown
+    /// asset request.
+    var readAsset: (_ path: String) -> (data: Data, mime: String)?
+
+    /// The currently open folder's root, for resolving a vault-relative attachment link
+    /// (e.g. `assets/report.pdf`) into a real on-disk file URL to open externally, rather
+    /// than navigating the web view in place to raw binary content. `nil` when no folder is
+    /// open (a single file, or nothing at all).
+    var vaultRootURL: URL?
+
     func makeCoordinator() -> WebPreviewCoordinator {
         WebPreviewCoordinator(
             text: text,
             preferences: preferences,
             onOutlineAvailabilityChange: onOutlineAvailabilityChange,
             onDocumentEdit: onDocumentEdit,
-            onEditorStateChange: onEditorStateChange
+            onEditorStateChange: onEditorStateChange,
+            importAsset: importAsset,
+            readAsset: readAsset,
+            vaultRootURL: vaultRootURL
         )
     }
 }
@@ -81,6 +101,9 @@ extension MarkdownWebView: NSViewRepresentable {
         context.coordinator.onOutlineAvailabilityChange = onOutlineAvailabilityChange
         context.coordinator.onDocumentEdit = onDocumentEdit
         context.coordinator.onEditorStateChange = onEditorStateChange
+        context.coordinator.importAsset = importAsset
+        context.coordinator.readAsset = readAsset
+        context.coordinator.vaultRootURL = vaultRootURL
         context.coordinator.setDocumentText(text)
         context.coordinator.setPreferences(preferences)
         registerFlushPendingEdit { [coordinator = context.coordinator] in
@@ -103,6 +126,9 @@ extension MarkdownWebView: UIViewRepresentable {
         context.coordinator.onOutlineAvailabilityChange = onOutlineAvailabilityChange
         context.coordinator.onDocumentEdit = onDocumentEdit
         context.coordinator.onEditorStateChange = onEditorStateChange
+        context.coordinator.importAsset = importAsset
+        context.coordinator.readAsset = readAsset
+        context.coordinator.vaultRootURL = vaultRootURL
         context.coordinator.setDocumentText(text)
         context.coordinator.setPreferences(preferences)
         registerFlushPendingEdit { [coordinator = context.coordinator] in
@@ -125,6 +151,9 @@ final class WebPreviewCoordinator: NSObject {
     var onOutlineAvailabilityChange: (Bool) -> Void
     var onDocumentEdit: (String) -> Void
     var onEditorStateChange: (EditorToolbarState) -> Void
+    var importAsset: (_ filename: String, _ data: Data) throws -> (path: String, mime: String)
+    var readAsset: (_ path: String) -> (data: Data, mime: String)?
+    var vaultRootURL: URL?
     private var isLoaded = false
     private weak var webView: WKWebView?
 
@@ -133,13 +162,19 @@ final class WebPreviewCoordinator: NSObject {
         preferences: WebPreferences,
         onOutlineAvailabilityChange: @escaping (Bool) -> Void,
         onDocumentEdit: @escaping (String) -> Void,
-        onEditorStateChange: @escaping (EditorToolbarState) -> Void
+        onEditorStateChange: @escaping (EditorToolbarState) -> Void,
+        importAsset: @escaping (_ filename: String, _ data: Data) throws -> (path: String, mime: String),
+        readAsset: @escaping (_ path: String) -> (data: Data, mime: String)?,
+        vaultRootURL: URL?
     ) {
         self.text = text
         self.preferences = preferences
         self.onOutlineAvailabilityChange = onOutlineAvailabilityChange
         self.onDocumentEdit = onDocumentEdit
         self.onEditorStateChange = onEditorStateChange
+        self.importAsset = importAsset
+        self.readAsset = readAsset
+        self.vaultRootURL = vaultRootURL
     }
 
     func makeWebView() -> WKWebView {
@@ -153,6 +188,7 @@ final class WebPreviewCoordinator: NSObject {
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         #if DEBUG
         webView.isInspectable = true
         #endif
@@ -269,36 +305,65 @@ final class WebPreviewCoordinator: NSObject {
 
 extension WebPreviewCoordinator: WKURLSchemeHandler {
     func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
-        guard let url = urlSchemeTask.request.url,
-              let asset = MarkdownCore.asset(forPath: url.path)
-        else {
-            urlSchemeTask.didFailWithError(
-                URLError(.fileDoesNotExist, userInfo: [
-                    NSURLErrorFailingURLErrorKey: urlSchemeTask.request.url as Any
-                ])
-            )
+        guard let url = urlSchemeTask.request.url else {
+            urlSchemeTask.didFailWithError(URLError(.fileDoesNotExist))
             return
         }
 
+        // `MarkdownCore.asset(forPath:)` always succeeds — it single-page-app-falls-back to
+        // `index.html` for any unmatched path — so an exact-match check is required here to
+        // tell "this is a real embedded UI file" apart from "nothing here, try the vault".
+        // Using the fallback-including lookup directly would silently serve `index.html`'s
+        // bytes (as `text/html`) in place of e.g. a dropped image, which is exactly the bug
+        // this comment is here to stop from being reintroduced.
+        if MarkdownCore.embeddedAssetExists(forPath: url.path), let asset = MarkdownCore.asset(forPath: url.path) {
+            respond(urlSchemeTask, url: url, data: asset.data, mimeType: asset.mimeType)
+            return
+        }
+
+        // Not a known embedded UI file — falls back to a vault asset (e.g. an image dropped
+        // into a note under `assets/`), so `<img src="assets/photo.png">` in either the
+        // WYSIWYG editor or Reading view resolves through the same scheme without a second
+        // one. See `.claude/plans/drag-drop-attachments-plan.md`.
+        if let asset = readAsset(url.path) {
+            respond(urlSchemeTask, url: url, data: asset.data, mimeType: asset.mime)
+            return
+        }
+
+        // Last resort: the original single-page-app fallback, preserved for anything that is
+        // neither a real embedded file nor a vault asset (e.g. a stray client-side route).
+        if let asset = MarkdownCore.asset(forPath: url.path) {
+            respond(urlSchemeTask, url: url, data: asset.data, mimeType: asset.mimeType)
+            return
+        }
+
+        urlSchemeTask.didFailWithError(
+            URLError(.fileDoesNotExist, userInfo: [
+                NSURLErrorFailingURLErrorKey: urlSchemeTask.request.url as Any
+            ])
+        )
+    }
+
+    func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {
+        // Every task is answered synchronously in `start`, so there is nothing to cancel.
+    }
+
+    private func respond(_ task: any WKURLSchemeTask, url: URL, data: Data, mimeType: String) {
         let response = HTTPURLResponse(
             url: url,
             statusCode: 200,
             httpVersion: "HTTP/1.1",
             headerFields: [
-                "Content-Type": asset.mimeType,
-                "Content-Length": String(asset.data.count),
+                "Content-Type": mimeType,
+                "Content-Length": String(data.count),
                 "Cache-Control": "no-store",
                 "Access-Control-Allow-Origin": "*",
             ]
         )!
 
-        urlSchemeTask.didReceive(response)
-        urlSchemeTask.didReceive(asset.data)
-        urlSchemeTask.didFinish()
-    }
-
-    func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {
-        // Every task is answered synchronously in `start`, so there is nothing to cancel.
+        task.didReceive(response)
+        task.didReceive(data)
+        task.didFinish()
     }
 }
 
@@ -358,6 +423,21 @@ extension WebPreviewCoordinator: WKScriptMessageHandlerWithReply {
             onDocumentEdit(newText)
             replyHandler(nil, nil)
 
+        case "importAsset":
+            guard let filename = body["filename"] as? String,
+                  let contentBase64 = body["contentBase64"] as? String,
+                  let data = Data(base64Encoded: contentBase64)
+            else {
+                replyHandler(nil, "`importAsset` requires `filename` and base64 `contentBase64`")
+                return
+            }
+            do {
+                let (path, mime) = try importAsset(filename, data)
+                replyHandler(["path": path, "mime": mime], nil)
+            } catch {
+                replyHandler(nil, error.localizedDescription)
+            }
+
         case "editorStateChanged":
             guard let stateBody = body["state"] as? [String: Any],
                   let state = EditorToolbarState(body: stateBody)
@@ -371,6 +451,17 @@ extension WebPreviewCoordinator: WKScriptMessageHandlerWithReply {
         default:
             replyHandler(nil, "Unknown bridge method '\(method)'")
         }
+    }
+}
+
+// MARK: - Context menu
+
+extension WebPreviewCoordinator: WKUIDelegate {
+    /// Suppresses WKWebView's default right-click menu (Reload, Back, Inspect Element, …)
+    /// — none of it applies to an embedded editor UI, and "Reload" in particular would
+    /// wipe the in-memory WYSIWYG document without saving.
+    func webView(_ webView: WKWebView, willOpenMenu menu: NSMenu, with event: NSEvent) {
+        menu.items.removeAll()
     }
 }
 
@@ -394,7 +485,24 @@ extension WebPreviewCoordinator: WKNavigationDelegate {
             return
         }
 
-        if url.scheme == WebUI.scheme || url.scheme == "about" {
+        if url.scheme == WebUI.scheme {
+            // A same-scheme link that isn't a known embedded UI route is a vault attachment
+            // link (e.g. `[report.pdf](assets/report.pdf)`) — open it externally with the
+            // OS's default app for that file type rather than navigating the web view to
+            // raw binary content it can't usefully display in place.
+            if navigationAction.navigationType == .linkActivated,
+               !MarkdownCore.embeddedAssetExists(forPath: url.path),
+               let rootURL = vaultRootURL {
+                let relative = url.path.hasPrefix("/") ? String(url.path.dropFirst()) : url.path
+                openExternally(rootURL.appending(path: relative))
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
+            return
+        }
+
+        if url.scheme == "about" {
             decisionHandler(.allow)
             return
         }

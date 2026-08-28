@@ -80,7 +80,9 @@ function startResize(event: PointerEvent) {
   const startWidth = outlineWidth.value
 
   function move(moveEvent: PointerEvent) {
-    outlineWidth.value = clampWidth(startWidth + moveEvent.clientX - startX)
+    // The outline pane sits to the *right* of the splitter now, so dragging right
+    // (positive deltaX) eats into it — the sign is flipped from a left-hand pane.
+    outlineWidth.value = clampWidth(startWidth - (moveEvent.clientX - startX))
   }
 
   function finish() {
@@ -105,23 +107,6 @@ function startResize(event: PointerEvent) {
 
 <template>
   <div class="app">
-    <template v-if="showOutline">
-      <DocumentOutline
-        class="outline-pane"
-        :style="{ width: `${outlineWidth}px` }"
-        :nodes="nodes"
-        :active-id="activeId"
-        @select="scrollToHeading"
-      />
-      <div
-        class="splitter"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize the outline"
-        @pointerdown="startResize"
-      />
-    </template>
-
     <div class="content-pane">
       <div ref="scroller" class="content" :style="{ fontSize: `${preferences.fontSize}px` }">
         <MarkdownPreview
@@ -140,6 +125,23 @@ function startResize(event: PointerEvent) {
         />
       </div>
     </div>
+
+    <template v-if="showOutline">
+      <div
+        class="splitter"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the outline"
+        @pointerdown="startResize"
+      />
+      <DocumentOutline
+        class="outline-pane"
+        :style="{ width: `${outlineWidth}px` }"
+        :nodes="nodes"
+        :active-id="activeId"
+        @select="scrollToHeading"
+      />
+    </template>
   </div>
 </template>
 

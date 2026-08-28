@@ -42,9 +42,21 @@ struct FolderCommands: Commands {
     @FocusedValue(\.folderPicker) private var folderPicker
     @FocusedValue(\.filePicker) private var filePicker
     @FocusedValue(\.workspace) private var workspace
+    @FocusedValue(\.newNoteAction) private var newNoteAction
+    @FocusedValue(\.newFolderAction) private var newFolderAction
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
+            Button("New Note…") { newNoteAction?() }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(newNoteAction == nil || workspace?.root == nil)
+
+            Button("New Folder…") { newFolderAction?() }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .disabled(newFolderAction == nil || workspace?.root == nil)
+
+            Divider()
+
             Button("Open File…") { filePicker?.wrappedValue = true }
                 .keyboardShortcut("o", modifiers: .command)
                 .disabled(filePicker == nil)
@@ -52,6 +64,19 @@ struct FolderCommands: Commands {
             Button("Open Folder…") { folderPicker?.wrappedValue = true }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
                 .disabled(folderPicker == nil)
+
+            Menu("Open Recent") {
+                if let entries = workspace?.recentVaults.entries, !entries.isEmpty {
+                    ForEach(entries) { entry in
+                        Button(entry.displayName) {
+                            Task { @MainActor in await workspace?.openRecent(entry) }
+                        }
+                    }
+                    Divider()
+                    Button("Clear Menu") { workspace?.recentVaults.clear() }
+                }
+            }
+            .disabled(workspace?.recentVaults.entries.isEmpty ?? true)
 
             Button(workspace?.root != nil ? "Close Folder" : "Close File") {
                 Task { @MainActor in await workspace?.close() }

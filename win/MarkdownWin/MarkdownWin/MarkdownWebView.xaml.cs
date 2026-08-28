@@ -111,6 +111,24 @@ internal sealed partial class MarkdownWebView : UserControl
     /// marks, heading level, mode, ...), so a native formatting toolbar can render itself.</summary>
     public event EventHandler<EditorToolbarState>? EditorStateChanged;
 
+    /// <summary>Copies a dropped/pasted file's bytes into the vault's `assets` folder — backs
+    /// the `"importAsset"` bridge case. Assigned by <c>MainWindow</c>, mirroring
+    /// <c>Workspace.FlushEditorPendingEdit</c>'s reverse-direction closure-threading pattern
+    /// (see MarkdownWebView.swift's `importAsset` for the same shape on macOS). A thrown
+    /// exception is surfaced to JS as a bridge error.</summary>
+    public Func<string, byte[], Task<(string Path, string Mime)>>? ImportAsset { get; set; }
+
+    /// <summary>Reads a vault file's raw bytes, used by <see cref="OnWebResourceRequested"/>'s
+    /// asset-serving fallback (e.g. an inline image a note references under `assets/`). A null
+    /// property, or a null/failed result, just 404s like any other unknown asset request.</summary>
+    public Func<string, Task<(byte[] Data, string Mime)?>>? ReadAsset { get; set; }
+
+    /// <summary>The currently open folder's root, for resolving a vault-relative attachment
+    /// link (e.g. `assets/report.pdf`) into a real on-disk path to open externally, rather
+    /// than navigating the web view in place to raw binary content. Null when no folder is
+    /// open (a single file, or nothing at all).</summary>
+    public string? VaultRootPath { get; set; }
+
     public MarkdownWebView()
     {
         InitializeComponent();
@@ -202,31 +220,73 @@ internal sealed partial class MarkdownWebView : UserControl
 
     // MARK: - Serving the embedded Vue app
 
-    private void OnWebResourceRequested(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)
+    private async void OnWebResourceRequested(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)
     {
         string path = new Uri(args.Request.Uri).AbsolutePath;
-        WebAsset? asset = MarkdownCore.Asset(path);
 
-        if (asset is null)
+        // `MarkdownCore.Asset(path)` always succeeds — it single-page-app-falls-back to
+        // `index.html` for any unmatched path — so an exact-match check is required to tell
+        // "this is a real embedded UI file" apart from "nothing here, try the vault". Using
+        // the fallback-including lookup directly would silently serve `index.html`'s bytes
+        // (as `text/html`) in place of e.g. a dropped image.
+        if (MarkdownCore.AssetExists(path) && MarkdownCore.Asset(path) is { } asset)
         {
-            args.Response = sender.Environment.CreateWebResourceResponse(null, 404, "Not Found", string.Empty);
+            args.Response = BuildResponse(sender, asset.Data, asset.MimeType);
             return;
         }
 
-        IRandomAccessStream stream = new MemoryStream(asset.Data).AsRandomAccessStream();
+        if (ReadAsset is null)
+        {
+            args.Response = FallbackResponse(sender, path);
+            return;
+        }
+
+        // Not a known embedded UI file — falls back to a vault asset (e.g. an image dropped
+        // into a note under `assets/`), so `<img src="assets/photo.png">` in either the
+        // WYSIWYG editor or Reading view resolves through the same origin without a second
+        // one. See `.claude/plans/drag-drop-attachments-plan.md`. Needs a deferral since the
+        // lookup is async, unlike the synchronous embedded-asset path above. `args.Response`
+        // must be set before `Complete()` is called — setting it afterward is not honored.
+        CoreWebView2Deferral deferral = args.GetDeferral();
+        try
+        {
+            (byte[] Data, string Mime)? vaultAsset = await ReadAsset(path);
+            args.Response = vaultAsset is { } found
+                ? BuildResponse(sender, found.Data, found.Mime)
+                : FallbackResponse(sender, path);
+        }
+        finally
+        {
+            deferral.Complete();
+        }
+    }
+
+    /// <summary>The original single-page-app fallback, preserved for anything that is neither
+    /// a real embedded file nor a vault asset (e.g. a stray client-side route).</summary>
+    private static CoreWebView2WebResourceResponse FallbackResponse(CoreWebView2 sender, string path)
+    {
+        WebAsset? fallback = MarkdownCore.Asset(path);
+        return fallback is not null
+            ? BuildResponse(sender, fallback.Data, fallback.MimeType)
+            : sender.Environment.CreateWebResourceResponse(null, 404, "Not Found", string.Empty);
+    }
+
+    private static CoreWebView2WebResourceResponse BuildResponse(CoreWebView2 sender, byte[] data, string mimeType)
+    {
+        IRandomAccessStream stream = new MemoryStream(data).AsRandomAccessStream();
         string headers = string.Join(
             '\n',
-            $"Content-Type: {asset.MimeType}",
-            $"Content-Length: {asset.Data.Length}",
+            $"Content-Type: {mimeType}",
+            $"Content-Length: {data.Length}",
             "Cache-Control: no-store",
             "Access-Control-Allow-Origin: *");
 
-        args.Response = sender.Environment.CreateWebResourceResponse(stream, 200, "OK", headers);
+        return sender.Environment.CreateWebResourceResponse(stream, 200, "OK", headers);
     }
 
     // MARK: - Calls from the Vue app into Rust
 
-    private void OnWebMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
+    private async void OnWebMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
     {
         JsonNode? envelope;
         try
@@ -296,6 +356,43 @@ internal sealed partial class MarkdownWebView : UserControl
                 Reply(id, null);
                 break;
 
+            case "importAsset":
+                if (body?["filename"]?.GetValue<string>() is not string filename ||
+                    body?["contentBase64"]?.GetValue<string>() is not string contentBase64)
+                {
+                    Reply(id, null, "`importAsset` requires `filename` and base64 `contentBase64`");
+                    return;
+                }
+
+                byte[] data;
+                try
+                {
+                    data = Convert.FromBase64String(contentBase64);
+                }
+                catch (FormatException)
+                {
+                    Reply(id, null, "`contentBase64` is not valid base64");
+                    return;
+                }
+
+                if (ImportAsset is null)
+                {
+                    Reply(id, null, "No folder is open.");
+                    return;
+                }
+
+                try
+                {
+                    (string importedPath, string importedMime) = await ImportAsset(filename, data);
+                    Reply(id, new JsonObject { ["path"] = importedPath, ["mime"] = importedMime });
+                }
+                catch (Exception error)
+                {
+                    Reply(id, null, error.Message);
+                }
+
+                break;
+
             case "editorStateChanged":
                 if (body?["state"] is not JsonObject stateBody || EditorToolbarState.TryParse(stateBody) is not { } state)
                 {
@@ -336,13 +433,48 @@ internal sealed partial class MarkdownWebView : UserControl
     /// <summary>Keeps the web view on the embedded app; links in the document open externally.</summary>
     private void OnNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args)
     {
-        if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri) || uri.Host == Host)
+        if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out Uri? uri))
         {
+            return;
+        }
+
+        if (uri.Host == Host)
+        {
+            // A same-origin, user-initiated navigation whose path isn't a known embedded UI
+            // route is a vault attachment link (e.g. `[report.pdf](assets/report.pdf)`) —
+            // open it externally with the OS's default app instead of navigating the web
+            // view to raw binary content it can't usefully display in place. Mirrors
+            // MarkdownWebView.swift's identical check.
+            if (args.IsUserInitiated && VaultRootPath is { } rootPath && !MarkdownCore.AssetExists(uri.AbsolutePath))
+            {
+                args.Cancel = true;
+                string relative = uri.AbsolutePath.TrimStart('/').Replace('/', System.IO.Path.DirectorySeparatorChar);
+                _ = LaunchFileExternallyAsync(System.IO.Path.Combine(rootPath, relative));
+            }
+
             return;
         }
 
         args.Cancel = true;
         _ = Launcher.LaunchUriAsync(uri);
+    }
+
+    /// <summary>Opens a real on-disk vault file with the OS's default app for its type — the
+    /// counterpart to <see cref="Launcher.LaunchUriAsync"/> used for genuinely external links
+    /// above, but for a local path rather than a URI. Failures (a missing/inaccessible file)
+    /// are swallowed, matching how a broken link behaves in any other app: nothing happens,
+    /// rather than an error dialog for what is, from the user's perspective, just a click.</summary>
+    private static async Task LaunchFileExternallyAsync(string fullPath)
+    {
+        try
+        {
+            Windows.Storage.StorageFile file = await Windows.Storage.StorageFile.GetFileFromPathAsync(fullPath);
+            await Launcher.LaunchFileAsync(file);
+        }
+        catch (Exception)
+        {
+            // See the summary above — deliberately silent.
+        }
     }
 
     private void OnNewWindowRequested(CoreWebView2 sender, CoreWebView2NewWindowRequestedEventArgs args)

@@ -142,9 +142,11 @@ debt uncovered while writing this documentation.
 | Feature | macOS | Windows |
 |---|---|---|
 | Markdown preview (Rust render + Vue UI) | ✅ | ✅ |
-| Document outline sidebar | ✅ | ⚠️ bridge exists but no settings/toggle UI to drive it |
+| Document outline sidebar | ✅ (toolbar open/close panel, right side of the webview layout — not a persisted Settings toggle any more) | ⚠️ bridge exists but no settings/toggle UI to drive it |
+| Per-file-kind viewers (image pan/zoom, PDF view + page thumbnails, plain-text edit for non-Markdown text files) | ✅ (`FileKind`, `ImageViewer.swift`, `PDFViewerView.swift` — see `macos-app.md` §3) | ❌ (explicitly not built yet; design captured in `.claude/plans/file-type-viewers-plan.md`) |
 | Single-file open/save | ✅ (via vault) | ✅ (plain file I/O, no vault) |
 | Folder/vault browsing (sidebar, file tree) | ✅ (`SidebarView`, `FileNode`) | ❌ |
+| Sidebar create/rename/delete + All-vs-Markdown filter | ✅ (`Workspace` mutation API, `SidebarFilter` — see `macos-app.md` §4) | ❌ (explicitly not built yet; tracked as a follow-up in `.claude/plans/sidebar-file-management-plan.md`) |
 | Vault writes with git-backed undo | ✅ (`VaultStore`) | ❌ (no `vault_*` FFI calls at all) |
 | Folder search | ✅ (`FolderSearch.swift`, plus vault's `search.rs` via tools) | ❌ |
 | External-change watching (live reload) | ✅ (`VaultWatcher`, FSEvents) | ❌ |
@@ -152,7 +154,7 @@ debt uncovered while writing this documentation.
 | Credential storage (Anthropic API key) | ✅ (macOS Keychain) | ❌ (no Credential Manager usage) |
 | Settings UI | ✅ | ❌ |
 | MCP server sidecar bundled with the app | ✅ (macOS-only build step) | ❌ |
-| App sandboxing | ❌ (no entitlements file exists despite README assuming one — see `security.md`) | N/A (Windows model differs; `runFullTrust` capability declared) |
+| App sandboxing | ✅ (`ENABLE_APP_SANDBOX = YES` in `project.pbxproj`, plus an explicit `Markdown.entitlements` since 2026-08-28 adding app-scope bookmarks and an app group — see `security.md` §6) | N/A (Windows model differs; `runFullTrust` capability declared) |
 
 This matches the design plan's own framing: **"Windows gets everything except the
 shell."** Everything Windows-specific still to build is enumerated in `windows-app.md` §7.

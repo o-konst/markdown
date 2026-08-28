@@ -12,8 +12,9 @@ using System.Linq;
 
 namespace MarkdownWin;
 
-/// <summary>File kinds the sidebar shows. Everything else is hidden, so a folder of mixed
-/// content reads as a list of notes rather than a file browser.</summary>
+/// <summary>Markdown-flavored file kinds — used for the "Open File…" picker and for routing
+/// a dropped file to open-as-document vs. reporting it unsupported. The sidebar tree itself
+/// shows every file and folder, hidden ones (<c>.git</c>, <c>.gitignore</c>, …) included.</summary>
 internal static class MarkdownFile
 {
     private static readonly HashSet<string> Extensions =
@@ -136,11 +137,9 @@ internal sealed class FileNode
         }
 
         return entries
-            .Where(path => !System.IO.Path.GetFileName(path).StartsWith('.'))
             .Select(Create)
             .Where(node => node is not null)
             .Select(node => node!)
-            .Where(node => node.IsDirectory || MarkdownFile.Matches(node.Path))
             .OrderByDescending(node => node.IsDirectory)
             .ThenBy(node => node.Name, StringComparer.CurrentCultureIgnoreCase)
             .ToList();

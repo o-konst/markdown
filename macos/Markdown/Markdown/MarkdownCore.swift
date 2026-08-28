@@ -47,4 +47,12 @@ nonisolated enum MarkdownCore {
             mimeType: String(cString: mime)
         )
     }
+
+    /// Whether `path` matches a real embedded web UI file exactly — unlike `asset(forPath:)`,
+    /// without its single-page-app fallback to `index.html`. Use this, not `asset(forPath:)`,
+    /// to tell "this is a genuine embedded UI route" apart from "nothing here" — `asset(forPath:)`
+    /// would otherwise always report success (as `index.html`) for literally any path.
+    static func embeddedAssetExists(forPath path: String) -> Bool {
+        md_asset_exists(path)
+    }
 }

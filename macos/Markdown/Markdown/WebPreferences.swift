@@ -9,12 +9,12 @@
 import SwiftUI
 
 enum PreferenceKey {
-    static let outlineVisible = "outlineVisible"
     static let contentWidth = "contentWidth"
     static let fontSize = "fontSize"
     static let appearance = "appearance"
     static let accountName = "accountName"
     static let accountEmail = "accountEmail"
+    static let sidebarFilter = "sidebarFilter"
 }
 
 /// Light, dark, or whatever the system is doing.

@@ -128,6 +128,43 @@ internal sealed class VaultStore : IDisposable
     public string? Undo(string commit) =>
         Call("undo", new JsonObject { ["commit"] = commit })["commit"]?.GetValue<string>();
 
+    /// <summary>Copies <paramref name="data"/> into the vault's `assets` folder, choosing a
+    /// collision-free name derived from <paramref name="filename"/> rather than overwriting
+    /// anything. Returns the vault-relative path actually used, and a best-effort MIME type
+    /// for the caller to decide how to render it (e.g. inline image vs. a plain attachment
+    /// link).</summary>
+    public (string Path, string Mime) ImportAsset(string filename, byte[] data)
+    {
+        JsonObject result = Call("import_asset", new JsonObject
+        {
+            ["filename"] = filename,
+            ["content_base64"] = Convert.ToBase64String(data),
+        });
+        string? path = result["path"]?.GetValue<string>();
+        string? mime = result["mime"]?.GetValue<string>();
+        if (path is null || mime is null)
+        {
+            throw new VaultException(VaultErrorKind.MalformedReply, "The vault returned an unexpected reply.");
+        }
+
+        return (path, mime);
+    }
+
+    /// <summary>Reads a vault file's raw bytes — unlike <see cref="Read"/>, not restricted to
+    /// valid UTF-8, so it also serves images and other binary attachments.</summary>
+    public (byte[] Data, string Mime) ReadAsset(string path)
+    {
+        JsonObject result = Call("read_asset", new JsonObject { ["path"] = path });
+        string? contentBase64 = result["content_base64"]?.GetValue<string>();
+        string? mime = result["mime"]?.GetValue<string>();
+        if (contentBase64 is null || mime is null)
+        {
+            throw new VaultException(VaultErrorKind.MalformedReply, "The vault returned an unexpected reply.");
+        }
+
+        return (Convert.FromBase64String(contentBase64), mime);
+    }
+
     /// <summary>Relative path of <paramref name="fullPath"/> inside <paramref name="root"/>, which is the
     /// only form the vault accepts. Returns null if <paramref name="fullPath"/> is not under <paramref name="root"/>.</summary>
     public static string? RelativePath(string fullPath, string root)

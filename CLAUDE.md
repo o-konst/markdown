@@ -104,8 +104,15 @@ anything load-bearing, and update the relevant doc when you change something it 
 
 - Two independent path-confinement implementations exist (`markdown_vault::confine` vs.
   vendored `solomd-mcp`'s `safety.rs`) — not yet converged.
-- The macOS app currently has **no App Sandbox entitlements**, despite `rust/README.md`
-  assuming a sandboxed app.
+- The macOS app **is sandboxed** (`com.apple.security.app-sandbox`, confirmed via
+  `codesign -d --entitlements -` on the built app) — matching, not contradicting,
+  `rust/README.md`'s assumption. This was previously misreported here as absent because
+  the base sandbox/file-access entitlements are synthesized by Xcode from declarative
+  build settings in `project.pbxproj` (`ENABLE_APP_SANDBOX = YES`, etc.), with no
+  `.entitlements` file on disk to find by searching — as of 2026-08-28 an explicit
+  `macos/Markdown/Markdown/Markdown.entitlements` also exists (`CODE_SIGN_ENTITLEMENTS`),
+  adding `com.apple.security.files.bookmarks.app-scope` and `.application-groups` for the
+  Recent Vaults feature. See `security.md` §6.
 - The chat UI has no Undo button on **Windows** (`ChatMessage.ToolCommit` is populated but
   unused in `ChatView.xaml`/`.xaml.cs`), despite the commit id being available on every
   tool-result event. macOS has one as of 2026-08-25 (`ChatViewModel.undo(commit:vaultRoot:)`

@@ -11,11 +11,17 @@ native host over a JS↔native bridge.
 
 - **Entry point** (`main.ts`): trivial — imports global CSS, mounts `App.vue` at `#app`.
   No router, no state library (Pinia/Vuex absent).
-- **`App.vue`**: the whole application shell. A two-pane layout — a resizable outline
-  sidebar (`DocumentOutline.vue`) and a scrollable content pane (`MarkdownPreview.vue`).
-  **This is a preview + outline pane, not an editor** — there is no text
-  input/textarea anywhere; markdown source arrives from the native host and only rendered
-  HTML is displayed.
+- **`App.vue`**: the whole application shell. A two-pane flex row — the content pane
+  first (`MarkdownPreview.vue` reading view / `WysiwygEditor.vue` edit view, toggled by
+  `mode`), then a resizable splitter, then the outline pane (`DocumentOutline.vue`) —
+  **on the right**, not the left (moved there so it reads as a "contents" side panel,
+  consistent with the native shell's other right-side panels; the splitter's drag-resize
+  math is sign-flipped accordingly, since it now sits on the outline's *left* edge).
+  Stale note being corrected here: an earlier pass of this doc claimed "not an editor —
+  no text input anywhere"; that predates `WysiwygEditor.vue`/`useWysiwygDocument.ts`
+  (a Tiptap-based WYSIWYG editor) and `editor/fileImport.ts` (drag/drop and paste file
+  import), both of which exist today and are not otherwise documented in this file —
+  treat editor/import internals as undocumented pending a fuller pass, not absent.
 - Wires together `useMarkdownPreview()` (doc/HTML/preferences state),
   `useDocumentOutline(html)` (derives the heading tree + re-IDs headings), and
   `useActiveHeading(scroller, ids)` (scroll-spy). Calls `reportOutlineState()` back to the

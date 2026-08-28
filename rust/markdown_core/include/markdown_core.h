@@ -29,6 +29,11 @@ typedef struct MdAsset {
 /// Returns false (and zeroes `out`) if `path` is invalid or nothing is embedded.
 bool md_asset_lookup(const char *path, MdAsset *out);
 
+/// Checks whether `path` matches a real embedded file exactly, without md_asset_lookup()'s
+/// single-page-app fallback to "index.html" — for a caller that needs to tell "this is a
+/// genuine embedded UI route" apart from "nothing here, try something else".
+bool md_asset_exists(const char *path);
+
 /// Number of files baked into the library.
 size_t md_asset_count(void);
 

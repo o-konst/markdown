@@ -119,6 +119,34 @@ nonisolated final class VaultStore {
         try call("undo", ["commit": commit])["commit"] as? String
     }
 
+    /// Copies `data` into the vault's `assets` folder, choosing a collision-free name
+    /// derived from `filename` rather than overwriting anything. Returns the vault-relative
+    /// path actually used, and a best-effort MIME type for the caller to decide how to
+    /// render it (e.g. inline image vs. a plain attachment link).
+    func importAsset(filename: String, data: Data) throws -> (path: String, mime: String) {
+        let result = try call("import_asset", [
+            "filename": filename,
+            "content_base64": data.base64EncodedString(),
+        ])
+        guard let path = result["path"] as? String, let mime = result["mime"] as? String else {
+            throw VaultError.malformedReply
+        }
+        return (path, mime)
+    }
+
+    /// Reads a vault file's raw bytes — unlike `read(_:)`, not restricted to valid UTF-8, so
+    /// it also serves images and other binary attachments.
+    func readAsset(_ path: String) throws -> (data: Data, mime: String) {
+        let result = try call("read_asset", ["path": path])
+        guard let contentBase64 = result["content_base64"] as? String,
+              let data = Data(base64Encoded: contentBase64),
+              let mime = result["mime"] as? String
+        else {
+            throw VaultError.malformedReply
+        }
+        return (data, mime)
+    }
+
     /// Relative path of `url` inside this vault, which is the only form the vault accepts.
     static func relativePath(of url: URL, in root: URL) -> String? {
         let target = url.standardizedFileURL.path

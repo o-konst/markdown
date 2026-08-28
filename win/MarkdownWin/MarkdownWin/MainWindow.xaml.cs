@@ -56,6 +56,9 @@ public sealed partial class MainWindow : Window
         Preview.DocumentEdited += (_, newText) => workspace.Text = newText;
         Preview.EditorStateChanged += (_, state) => ApplyToolbarState(state);
         workspace.FlushEditorPendingEdit = () => Preview.FlushPendingEditAsync();
+        Preview.ImportAsset = (filename, data) => workspace.ImportAssetAsync(filename, data);
+        Preview.ReadAsset = path => workspace.ReadAssetAsync(path);
+        Preview.VaultRootPath = workspace.Root?.Path;
 
         UpdateTitle();
         ApplyTheme();
@@ -84,6 +87,7 @@ public sealed partial class MainWindow : Window
 
             case nameof(Workspace.Root):
                 CloseFolderButton.IsEnabled = workspace.Root is not null;
+                Preview.VaultRootPath = workspace.Root?.Path;
                 break;
         }
     }

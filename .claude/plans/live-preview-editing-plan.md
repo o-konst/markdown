@@ -1,6 +1,6 @@
 # Plan: live-preview (Typora-style) WYSIWYG markdown editing
 
-**Status: in progress. Phases 0-3 merged into `main`** (2026-08-25, merge commit after  
+**Status: in progress. Phases 0-3 merged into** `main` (2026-08-25, merge commit after  
 `worktree-agent-a893373f5d6decb76` — re-verified post-merge with a real `bun run test`  
 (26/26), `bun run type-check`, and a real `xcodebuild clean build` of `main`'s own  
 `macos/Markdown/Markdown.xcodeproj`, all clean). Opening the project normally in Xcode now  
@@ -13,18 +13,19 @@ land, and keep it in sync if the design changes during implementation.
 
 ## Decisions locked in (see research doc for why)
 
-- Editing surface moves into the Vue WebView using **Tiptap** (`@tiptap/core` +
+- Editing surface moves into the Vue WebView using **Tiptap** (`@tiptap/core` +  
 `@tiptap/vue-3` + `@tiptap/pm` + extensions), not raw ProseMirror.
-- Markdown↔doc conversion uses the first-party **`@tiptap/markdown`** package directly —
+- Markdown↔doc conversion uses the first-party `@tiptap/markdown` package directly —  
 no hand-written `markdown-it`/`prosemirror-markdown` layer.
-- **Typora-style true WYSIWYG** (not Obsidian-style decorations); both **macOS and
-Windows** in scope together.
-- Native `TextEditor`/`EditorOverlay` are **kept**, repurposed as a "Source" fallback —
+- **Typora-style true WYSIWYG** (not Obsidian-style decorations); both **macOS and**  
+**Windows** in scope together.
+- Native `TextEditor`/`EditorOverlay` are **kept**, repurposed as a "Source" fallback —  
 not deleted.
-- Reading view (`MarkdownPreview.vue` + Rust's sanitized `render_markdown`) is **kept
-unchanged** as an alternate mode.
-- Two custom extensions are needed on top of `@tiptap/markdown`: **footnotes** and
-**`{#custom-id}` heading anchors** — both absent from Tiptap itself and from every
+- Reading view (`MarkdownPreview.vue` + Rust's sanitized `render_markdown`) is **kept**  
+**unchanged** as an alternate mode.
+- Two custom extensions are needed on top of `@tiptap/markdown`: **footnotes** and  
+`{#custom-id}` **heading anchors** — both absent from Tiptap itself and from every
+
 prior-art app researched.
 
 ## Open items to confirm before/at implementation start
@@ -48,11 +49,11 @@ prior-art app researched.
 
 ## Phase 0 — Spike (hard gate; Vue-only, no native changes)
 
-**Status: DONE, gate passed.** Implemented by a forked subagent in an isolated worktree
-(`.claude/worktrees/agent-a893373f5d6decb76`, branch `worktree-agent-a893373f5d6decb76`,
-commit `cd6187c`), then independently re-verified (re-ran `bun install && bun run test`,
-`bun run type-check`, and a production `vite build`) rather than taken on the agent's
-report alone. **Merged into `main`** along with Phases 1-3 — see the status line at the
+**Status: DONE, gate passed.** Implemented by a forked subagent in an isolated worktree  
+(`.claude/worktrees/agent-a893373f5d6decb76`, branch `worktree-agent-a893373f5d6decb76`,  
+commit `cd6187c`), then independently re-verified (re-ran `bun install && bun run test`,  
+`bun run type-check`, and a production `vite build`) rather than taken on the agent's  
+report alone. **Merged into** `main` along with Phases 1-3 — see the status line at the  
 top of this file.
 
 - [x] Add Tiptap deps (`@tiptap/core`, `@tiptap/vue-3`, `@tiptap/pm`, `@tiptap/starter-kit`,
@@ -116,10 +117,10 @@ top of this file.
 
 ## Phase 1 — Bridge protocol
 
-**Status: DONE.** Same worktree/branch as Phase 0
-(`.claude/worktrees/agent-a893373f5d6decb76`, branch `worktree-agent-a893373f5d6decb76`),
-commit `2d82f96`. Independently re-verified (`bun run test` → 14/14, `bun run type-check`
-clean, plus direct code review of `nativeBridge.ts` and `useWysiwygDocument.ts`) rather
+**Status: DONE.** Same worktree/branch as Phase 0  
+(`.claude/worktrees/agent-a893373f5d6decb76`, branch `worktree-agent-a893373f5d6decb76`),  
+commit `2d82f96`. Independently re-verified (`bun run test` → 14/14, `bun run type-check`  
+clean, plus direct code review of `nativeBridge.ts` and `useWysiwygDocument.ts`) rather  
 than taken on the agent's report alone.
 
 - [x] Added `{ method: 'documentEdit', text: string }` to `HostRequest` in
@@ -171,11 +172,11 @@ than taken on the agent's report alone.
 
 ## Phase 2 — Editor component (`vue-project/`)
 
-**Status: DONE.** Same worktree/branch, commit `1086ce7`. Independently re-verified
-(`bun run test` → 26/26, `bun run type-check` clean, production `bun run build-only`
-confirming the reported bundle size, plus direct code review of `headingIdExtension.ts`,
-`useWysiwygDocument.ts`'s history-reset fix, `useEditorOutline.ts` + its test cross-checked
-line-for-line against `rust/markdown_vault/src/outline.rs`'s actual test module, and
+**Status: DONE.** Same worktree/branch, commit `1086ce7`. Independently re-verified  
+(`bun run test` → 26/26, `bun run type-check` clean, production `bun run build-only`  
+confirming the reported bundle size, plus direct code review of `headingIdExtension.ts`,  
+`useWysiwygDocument.ts`'s history-reset fix, `useEditorOutline.ts` + its test cross-checked  
+line-for-line against `rust/markdown_vault/src/outline.rs`'s actual test module, and  
 `pasteSafety.spec.ts`) rather than taken on the agent's report alone.
 
 - [x] `WysiwygEditor.vue` wired into `App.vue` alongside the kept `MarkdownPreview.vue`
@@ -230,23 +231,23 @@ line-for-line against `rust/markdown_vault/src/outline.rs`'s actual test module,
   a third time on faith.
   ```
 - [x] **Real bugs found by testing, not assumed**:
-  - `headingIdExtension.ts` had `rendered: false` on the `id` attr, so explicit `{#id}`
-  headings never got a real DOM `id` — broke outline anchor-scrolling entirely. Fixed;
-  auto-slugged headings (the common case) get their id stamped onto the rendered DOM
-  directly by `WysiwygEditor.vue` from the computed outline (mirroring how Reading
+  - `headingIdExtension.ts` had `rendered: false` on the `id` attr, so explicit `{#id}`  
+  headings never got a real DOM `id` — broke outline anchor-scrolling entirely. Fixed;  
+  auto-slugged headings (the common case) get their id stamped onto the rendered DOM  
+  directly by `WysiwygEditor.vue` from the computed outline (mirroring how Reading  
   view's `buildOutline` mutates ids onto parsed HTML).
-  - Switching `useWysiwygDocument.ts` to `@tiptap/vue-3`'s `Editor` subclass (needed for
-  `<EditorContent>` to type-check) silently broke the Phase 1 undo-reset: the Vue
-  subclass tracks state in a separate Vue `customRef` that only its own
-  `registerPlugin`/`unregisterPlugin` keep in sync — the raw `view.updateState()` from
-  Phase 1 bypassed it, so `editor.state` stayed stale after a reset even though the
-  underlying view was correct. Caught by the *existing* Phase 1 test failing after the
-  class swap (good regression-catching in its own right). Fixed via
-  `editor.unregisterPlugin('history')` + `editor.registerPlugin(history())` — the public
-  API the subclass does track — verified correct by direct code review of the fix's
+  - Switching `useWysiwygDocument.ts` to `@tiptap/vue-3`'s `Editor` subclass (needed for  
+  `<EditorContent>` to type-check) silently broke the Phase 1 undo-reset: the Vue  
+  subclass tracks state in a separate Vue `customRef` that only its own  
+  `registerPlugin`/`unregisterPlugin` keep in sync — the raw `view.updateState()` from  
+  Phase 1 bypassed it, so `editor.state` stayed stale after a reset even though the  
+  underlying view was correct. Caught by the *existing* Phase 1 test failing after the  
+  class swap (good regression-catching in its own right). Fixed via  
+  `editor.unregisterPlugin('history')` + `editor.registerPlugin(history())` — the public  
+  API the subclass does track — verified correct by direct code review of the fix's  
   reasoning, not just the test passing.
-  - happy-dom has no real layout engine, so simulated clicks can't hit-test to a text
-  position; table-toolbar tests use `editor.commands.setTextSelection()` directly
+  - happy-dom has no real layout engine, so simulated clicks can't hit-test to a text  
+  position; table-toolbar tests use `editor.commands.setTextSelection()` directly  
   instead, documented as the "headless-safe equivalent."
 - [x] Removed the now-superseded Phase 0 dev-only spike (`wysiwyg-spike.html`/
   ```
@@ -255,17 +256,17 @@ line-for-line against `rust/markdown_vault/src/outline.rs`'s actual test module,
 
 ## Phase 3 — macOS integration (`macos/Markdown/Markdown/`)
 
-**Status: DONE except one flagged gap.** Same worktree/branch, commit `3475499`.
-Independently re-verified with a **real, from-scratch `xcodebuild` run** (not taken on the
-agent's report alone) — `xcodebuild -project macos/Markdown/Markdown.xcodeproj -scheme Markdown -configuration Debug build` → `** BUILD SUCCEEDED **`, real code-signing, real
-link against `libmarkdown_core.a` — plus direct code review of both Swift diffs and the
-two small Vue-side bridge additions, plus `bun run test` re-confirmed at 26/26 (unaffected
+**Status: DONE except one flagged gap.** Same worktree/branch, commit `3475499`.  
+Independently re-verified with a **real, from-scratch** `xcodebuild` **run** (not taken on the  
+agent's report alone) — `xcodebuild -project macos/Markdown/Markdown.xcodeproj -scheme Markdown -configuration Debug build` → `** BUILD SUCCEEDED **`, real code-signing, real  
+link against `libmarkdown_core.a` — plus direct code review of both Swift diffs and the  
+two small Vue-side bridge additions, plus `bun run test` re-confirmed at 26/26 (unaffected  
 by the Swift-side changes).
 
-*Note on IDE diagnostics*: SourceKit briefly showed a wall of "cannot find X in scope"
-errors on these files (including for types this phase never touched, like `Workspace`/
-`Account`/`WebPreferences`) — that's stale/false-positive, not a real problem: this
-worktree had no DerivedData/build cache until the `xcodebuild` run above populated one.
+*Note on IDE diagnostics*: SourceKit briefly showed a wall of "cannot find X in scope"  
+errors on these files (including for types this phase never touched, like `Workspace`/  
+`Account`/`WebPreferences`) — that's stale/false-positive, not a real problem: this  
+worktree had no DerivedData/build cache until the `xcodebuild` run above populated one.  
 Confirmed by the real build succeeding cleanly with zero warnings or errors.
 
 - [x] `MarkdownWebView.swift`: `onDocumentEdit: (String) -> Void` threaded through
@@ -289,7 +290,7 @@ Confirmed by the real build succeeding cleanly with zero warnings or errors.
   single-owner (assign/restore, not the multi-subscriber chain `setDocument` uses)
   by `useWysiwygDocument`.
   ```
-- [x] **`flushPendingEdit()` wiring gap — closed** (2026-08-25, commit `89c7e44`, same
+- [x] `flushPendingEdit()` **wiring gap — closed** (2026-08-25, commit `89c7e44`, same
   ```
   worktree/branch). Independently re-verified with a **real `xcodebuild clean build`**
   (not just incremental — confirmed zero Swift warnings/errors, only benign toolchain
@@ -323,79 +324,79 @@ Confirmed by the real build succeeding cleanly with zero warnings or errors.
   the diff) is load-bearing for this platform, not a formality.
   ```
 - [ ] Manual test matrix — **honest status, not all run against a real vault**:
-  - Type → autosave → git commit, no cursor jump: **code-inspection + build-verified
-  only**, not run. Full chain traced (`documentEdit` → `text=newText` →
-  `onDocumentEdit` → `workspace.text` → existing 800ms autosave → `VaultStore.write` →
+  - Type → autosave → git commit, no cursor jump: **code-inspection + build-verified**  
+  **only**, not run. Full chain traced (`documentEdit` → `text=newText` →  
+  `onDocumentEdit` → `workspace.text` → existing 800ms autosave → `VaultStore.write` →  
   git commit) and the echo-suppression ordering confirmed correct by reading the code.
-  - External edit mid-typing → conflict banner: **not run**. `absorbExternalChanges` is
-  untouched this phase; reasoned (not tested) to still work identically since
-  `hasUnsavedChanges` flips the same way regardless of which UI surface set
+  - External edit mid-typing → conflict banner: **not run**. `absorbExternalChanges` is  
+  untouched this phase; reasoned (not tested) to still work identically since  
+  `hasUnsavedChanges` flips the same way regardless of which UI surface set  
   `workspace.text`.
-  - Chat-agent revert + undo interaction: **partially test-verified**. The Vue-side half
-  (`applyExternalText`/`resetHistory`) is real-test-verified from Phase 2; the
-  native→Vue handoff itself (`setDocumentText`→`pushDocument`→Vue) is
+  - Chat-agent revert + undo interaction: **partially test-verified**. The Vue-side half  
+  (`applyExternalText`/`resetHistory`) is real-test-verified from Phase 2; the  
+  native→Vue handoff itself (`setDocumentText`→`pushDocument`→Vue) is  
   code-inspection-only, not run end-to-end.
-  - Fast file-switch, no lost keystrokes: **wiring gap now closed** (see above,
+  - Fast file-switch, no lost keystrokes: **wiring gap now closed** (see above,  
   commit `89c7e44`) — build-verified, but still **not run against a real vault**.
-  - **All four items need a human with Xcode running the real app against a real vault to
-  close out** — flagged here rather than claimed done.
+  - **All four items need a human with Xcode running the real app against a real vault to**  
+  **close out** — flagged here rather than claimed done.
 
-**Real bug from actual human testing (2026-08-25), fixed** — the first bug this whole
-effort caught by someone other than an agent or me: the user built and ran the app, clicked
-the toolbar toggle (relabeled "Source" in this phase, still bound to Cmd+E), and reported
-"still shows old source editor." Root cause: `vue-project/src/App.vue`'s Phase 2
-`mode: 'reading' | 'edit'` ref defaulted to `'reading'`, so opening a file landed in the
-read-only Reading view, with the actual new WYSIWYG editor reachable only via a small
-in-content toggle — easy to miss, and exactly backwards for an app whose whole point is
-live-preview editing. Fixed (commit `b982906`, same worktree/branch) by defaulting `mode`
-to `'edit'`; Reading view is now the opt-in mode, not the entry point. Re-verified: 26/26
-tests, type-check clean, and a full `xcodebuild build` with the rebuilt Vue bundle embedded
+**Real bug from actual human testing (2026-08-25), fixed** — the first bug this whole  
+effort caught by someone other than an agent or me: the user built and ran the app, clicked  
+the toolbar toggle (relabeled "Source" in this phase, still bound to Cmd+E), and reported  
+"still shows old source editor." Root cause: `vue-project/src/App.vue`'s Phase 2  
+`mode: 'reading' | 'edit'` ref defaulted to `'reading'`, so opening a file landed in the  
+read-only Reading view, with the actual new WYSIWYG editor reachable only via a small  
+in-content toggle — easy to miss, and exactly backwards for an app whose whole point is  
+live-preview editing. Fixed (commit `b982906`, same worktree/branch) by defaulting `mode`  
+to `'edit'`; Reading view is now the opt-in mode, not the entry point. Re-verified: 26/26  
+tests, type-check clean, and a full `xcodebuild build` with the rebuilt Vue bundle embedded  
 — `** BUILD SUCCEEDED **`, zero warnings.
 
-**Follow-up report ("doesn't work, not editing"), root-caused as a testing-location issue,
-not a code bug**: checked Xcode's DerivedData and found the user had most recently built
-`/Volumes/T7/Projects/markdown/macos/Markdown/Markdown.xcodeproj` — the **main working
-tree**, not the worktree branch this entire feature lived on. Confirmed directly: main's
-`ContentView.swift` still had the toolbar labeled `"Edit"` (pre-Phase-3) and
-`vue-project/src/editor/` didn't exist there at all — so every prior test session had been
-against the old, unmodified app, which fully explains both this report and the "still
-shows old source editor" one before it. Resolved by merging Phases 0-3 into `main` (see
-top-of-file status) rather than continuing to develop on an isolated branch the user's
+**Follow-up report ("doesn't work, not editing"), root-caused as a testing-location issue,**  
+**not a code bug**: checked Xcode's DerivedData and found the user had most recently built  
+`/Volumes/T7/Projects/markdown/macos/Markdown/Markdown.xcodeproj` — the **main working**  
+**tree**, not the worktree branch this entire feature lived on. Confirmed directly: main's  
+`ContentView.swift` still had the toolbar labeled `"Edit"` (pre-Phase-3) and  
+`vue-project/src/editor/` didn't exist there at all — so every prior test session had been  
+against the old, unmodified app, which fully explains both this report and the "still  
+shows old source editor" one before it. Resolved by merging Phases 0-3 into `main` (see  
+top-of-file status) rather than continuing to develop on an isolated branch the user's  
 normal workflow never saw.
 
-**Real pre-existing bug, found via this feature and fixed directly on `main`** (commit
-`3b5f046`): "bold text doesn't work" — `vue-project/src/assets/base.css` has a global
-`*, *::before, *::after { font-weight: normal; }` reset that silently neutralized the
-browser's default bold weight for `<strong>`/`<b>` (and headings, masked there by large
-font-size). This predates this whole feature and affected the original Reading view too,
-not just the new editor — the underlying `Bold` mark/HTML was always applied correctly;
-it was a pure CSS gap. Fixed with explicit `font-weight` overrides in both
-`MarkdownPreview.vue` and `WysiwygEditor.vue`. Re-verified: 26/26 tests, type-check, real
+**Real pre-existing bug, found via this feature and fixed directly on** `main` (commit  
+`3b5f046`): "bold text doesn't work" — `vue-project/src/assets/base.css` has a global  
+`*, *::before, *::after { font-weight: normal; }` reset that silently neutralized the  
+browser's default bold weight for `<strong>`/`<b>` (and headings, masked there by large  
+font-size). This predates this whole feature and affected the original Reading view too,  
+not just the new editor — the underlying `Bold` mark/HTML was always applied correctly;  
+it was a pure CSS gap. Fixed with explicit `font-weight` overrides in both  
+`MarkdownPreview.vue` and `WysiwygEditor.vue`. Re-verified: 26/26 tests, type-check, real  
 `xcodebuild build` — clean.
 
 ## Phase 4 — Windows integration (`win/MarkdownWin/MarkdownWin/`)
 
-**Status: DONE except manual verification.** Built directly on `main` (no worktree,
-following Phase 6/7's precedent — the worktree round trip is what caused Phase 3's earlier
-testing-location confusion). Not yet committed — see the note at the end of this section.
-No Vue changes were needed; only already-existing bridge methods (`documentEdit`,
-`flushPendingEdit`, `runEditorCommand`, `editorStateChanged`) were consumed, exactly as
+**Status: DONE except manual verification.** Built directly on `main` (no worktree,  
+following Phase 6/7's precedent — the worktree round trip is what caused Phase 3's earlier  
+testing-location confusion). Not yet committed — see the note at the end of this section.  
+No Vue changes were needed; only already-existing bridge methods (`documentEdit`,  
+`flushPendingEdit`, `runEditorCommand`, `editorStateChanged`) were consumed, exactly as  
 scoped.
 
-Verification approach, and why it goes beyond what Phase 3/6/7 could do on macOS: this
-session runs directly on the Windows machine that builds this project, so — unlike every
-prior phase, which could only build and had no way to check API surface beyond memory/docs
-— every WinUI API assumption below (`Symbol` enum member names, `AppBarToggleButton.Click`
-existing and not looping back from programmatic `IsChecked` changes, `FlyoutBase.Opening`'s
-exact delegate signature, `CommandBarLabelPosition` only having `Default`/`Collapsed`, no
-`Right`) was checked against the **actual compiled `Microsoft.WinUI.dll`** from a prior
-build, loaded via `System.Reflection.MetadataLoadContext` in a throwaway scratch console
-app (real reflection over the real assembly, not guessed from memory) — then the whole
-project was built for real: `dotnet build MarkdownWin.slnx -c Debug -p:Platform=x64`, both
-an incremental build and a `-t:Rebuild`, both clean (`0 Error(s)`, the only warning being
-the pre-existing, expected "reusing existing vue-project/dist" Rust build-script notice
-every Windows build produces). Only x64 Debug was built, not x86/ARM64 — the change is pure
-C#/XAML with no P/Invoke or platform-conditional code, so cross-platform risk is low, but
+Verification approach, and why it goes beyond what Phase 3/6/7 could do on macOS: this  
+session runs directly on the Windows machine that builds this project, so — unlike every  
+prior phase, which could only build and had no way to check API surface beyond memory/docs  
+— every WinUI API assumption below (`Symbol` enum member names, `AppBarToggleButton.Click`  
+existing and not looping back from programmatic `IsChecked` changes, `FlyoutBase.Opening`'s  
+exact delegate signature, `CommandBarLabelPosition` only having `Default`/`Collapsed`, no  
+`Right`) was checked against the **actual compiled** `Microsoft.WinUI.dll` from a prior  
+build, loaded via `System.Reflection.MetadataLoadContext` in a throwaway scratch console  
+app (real reflection over the real assembly, not guessed from memory) — then the whole  
+project was built for real: `dotnet build MarkdownWin.slnx -c Debug -p:Platform=x64`, both  
+an incremental build and a `-t:Rebuild`, both clean (`0 Error(s)`, the only warning being  
+the pre-existing, expected "reusing existing vue-project/dist" Rust build-script notice  
+every Windows build produces). Only x64 Debug was built, not x86/ARM64 — the change is pure  
+C#/XAML with no P/Invoke or platform-conditional code, so cross-platform risk is low, but  
 this wasn't independently confirmed the way x64 was.
 
 ### 4a — Core edit bridge (mirrors Phase 3's macOS work)
@@ -501,75 +502,75 @@ this wasn't independently confirmed the way x64 was.
 
 ### 4d — Open File and drag-and-drop (added post-hoc, outside the plan's original Phase 4 scope)
 
-**Status: DONE.** Requested directly by the user after trying Phase 4 ("open folder/files
-doesn't work. also implement drag/drop") — Windows never had single-file open or
-drag-and-drop at all (only "Open Folder…" existed; macOS has had both since before this
-plan started, via `Workspace.swift`'s `open(file:)`/`open(dropped:)`), so this folds Windows
+**Status: DONE.** Requested directly by the user after trying Phase 4 ("open folder/files  
+doesn't work. also implement drag/drop") — Windows never had single-file open or  
+drag-and-drop at all (only "Open Folder…" existed; macOS has had both since before this  
+plan started, via `Workspace.swift`'s `open(file:)`/`open(dropped:)`), so this folds Windows  
 up to parity rather than fixing a regression in Phase 4's own work.
 
-- **Likely root cause of "doesn't work", found by code review**: `OnOpenFolderClick` invoked
-`OpenFolderAsync()` as a discarded, fire-and-forget `Task` (`_ = OpenFolderAsync();`), and
-the picker call itself — `await picker.PickSingleFolderAsync()` — sat **outside** the
-method's only try/catch, which wrapped just `workspace.OpenAsync(...)`. If the picker call
-throws for any reason (a real possibility for `FolderPicker`/`FileOpenPicker` in a WinUI3
-desktop app — window-handle/COM activation issues are a well-documented failure mode for
-these pickers), that exception becomes an unobserved fault on a discarded `Task` — in
-modern .NET this does **not** crash the process, it is simply swallowed, with nothing
-visible to the user. That failure mode matches "click Open Folder, nothing happens" more
-precisely than any bug found in the folder-tree-population code itself (which was read
-end-to-end — `Workspace.OpenAsync`, `FileNode.LoadChildren`/`Contents`,
-`SidebarView.RenderState`/`RenderFileTree` — and shows no defect). **Fixed** by moving the
-entire picker-and-open sequence inside one try/catch in both `OpenFolderAsync` and the new
-`OpenFileAsync`, so any failure now reaches `Workspace.ReportOpenFailure` and shows in the
-sidebar's existing error banner instead of vanishing. **Honestly caveated**: this could not
-be confirmed against the user's exact failure — see the verification note below — so if
+- **Likely root cause of "doesn't work", found by code review**: `OnOpenFolderClick` invoked  
+`OpenFolderAsync()` as a discarded, fire-and-forget `Task` (`_ = OpenFolderAsync();`), and  
+the picker call itself — `await picker.PickSingleFolderAsync()` — sat **outside** the  
+method's only try/catch, which wrapped just `workspace.OpenAsync(...)`. If the picker call  
+throws for any reason (a real possibility for `FolderPicker`/`FileOpenPicker` in a WinUI3  
+desktop app — window-handle/COM activation issues are a well-documented failure mode for  
+these pickers), that exception becomes an unobserved fault on a discarded `Task` — in  
+modern .NET this does **not** crash the process, it is simply swallowed, with nothing  
+visible to the user. That failure mode matches "click Open Folder, nothing happens" more  
+precisely than any bug found in the folder-tree-population code itself (which was read  
+end-to-end — `Workspace.OpenAsync`, `FileNode.LoadChildren`/`Contents`,  
+`SidebarView.RenderState`/`RenderFileTree` — and shows no defect). **Fixed** by moving the  
+entire picker-and-open sequence inside one try/catch in both `OpenFolderAsync` and the new  
+`OpenFileAsync`, so any failure now reaches `Workspace.ReportOpenFailure` and shows in the  
+sidebar's existing error banner instead of vanishing. **Honestly caveated**: this could not  
+be confirmed against the user's exact failure — see the verification note below — so if  
 the sidebar now shows a real error message on click, that error text is the next lead.
-- **`Workspace.OpenFileAsync(string path)`** (new): mirrors `Workspace.swift`'s
-`open(file:)` — opens a single file with no folder/vault context, or just selects it if it
-already lives inside the currently-open folder. **A real correctness gap this closes,
-found while porting**: `FlushPendingSaveAsync` only ever wrote through `VaultStore`
-(`RelativePath(url) is not { } relative` short-circuited the whole write for any URL
-outside an open folder) — a single file opened with no folder would have silently never
-saved at all, autosave included, since `HasUnsavedChanges` would flip back and forth but
-the write branch could never run. Fixed with the same direct-disk-write fallback
+- `Workspace.OpenFileAsync(string path)` (new): mirrors `Workspace.swift`'s  
+`open(file:)` — opens a single file with no folder/vault context, or just selects it if it  
+already lives inside the currently-open folder. **A real correctness gap this closes,**  
+**found while porting**: `FlushPendingSaveAsync` only ever wrote through `VaultStore`  
+(`RelativePath(url) is not { } relative` short-circuited the whole write for any URL  
+outside an open folder) — a single file opened with no folder would have silently never  
+saved at all, autosave included, since `HasUnsavedChanges` would flip back and forth but  
+the write branch could never run. Fixed with the same direct-disk-write fallback  
 `Workspace.swift`'s `flushPendingSave(to:)` already has for this exact case.
-- **`Workspace.OpenDroppedAsync(string path)`** (new) + **`UnsupportedDropException`**:
-mirrors `open(dropped:)`/`UnsupportedDropError` — routes a directory to `OpenAsync`, a
-recognised Markdown extension (`MarkdownFile.Matches`, now also exposed as
-`PickerExtensions` for the file picker's filter) to `OpenFileAsync`, anything else to
+- `Workspace.OpenDroppedAsync(string path)` (new) + `UnsupportedDropException`:  
+mirrors `open(dropped:)`/`UnsupportedDropError` — routes a directory to `OpenAsync`, a  
+recognised Markdown extension (`MarkdownFile.Matches`, now also exposed as  
+`PickerExtensions` for the file picker's filter) to `OpenFileAsync`, anything else to  
 `ReportOpenFailure` rather than silently doing nothing.
-- **XAML/`MainWindow.xaml.cs`**: an "Open File…" `AppBarButton` (Ctrl+O, matching macOS's
-Cmd+O — "Open Folder…" already used Ctrl+Shift+O, matching macOS's Cmd+Shift+O) added
-before "Open Folder…". Drag-and-drop wired on the outermost `Grid` (`AllowDrop`,
-`DragOver`/`DragLeave`/`Drop`), so a drop lands the same way regardless of which part of
-the window it's over — mirrors `ContentView.swift`'s window-wide `.onDrop`. A
-`DropHighlight` border (`IsHitTestVisible="False"` so it can't itself intercept the drag)
-shows/hides on `DragOver`/`DragLeave`/`Drop`, mirroring `ContentView.swift`'s
-`isDropTargeted` overlay. `DragEventArgs.GetDeferral()`/`.Complete()` used around the
-`async` `Drop` handler, since `IStorageItem`s are only available via
-`DataView.GetStorageItemsAsync()`, an async WinRT call the synchronous event needs a
-deferral to await past. Only the first dropped item is opened (matches
+- **XAML/**`MainWindow.xaml.cs`: an "Open File…" `AppBarButton` (Ctrl+O, matching macOS's  
+Cmd+O — "Open Folder…" already used Ctrl+Shift+O, matching macOS's Cmd+Shift+O) added  
+before "Open Folder…". Drag-and-drop wired on the outermost `Grid` (`AllowDrop`,  
+`DragOver`/`DragLeave`/`Drop`), so a drop lands the same way regardless of which part of  
+the window it's over — mirrors `ContentView.swift`'s window-wide `.onDrop`. A  
+`DropHighlight` border (`IsHitTestVisible="False"` so it can't itself intercept the drag)  
+shows/hides on `DragOver`/`DragLeave`/`Drop`, mirroring `ContentView.swift`'s  
+`isDropTargeted` overlay. `DragEventArgs.GetDeferral()`/`.Complete()` used around the  
+`async` `Drop` handler, since `IStorageItem`s are only available via  
+`DataView.GetStorageItemsAsync()`, an async WinRT call the synchronous event needs a  
+deferral to await past. Only the first dropped item is opened (matches  
 `ContentView.swift`'s `providers.first`).
-- **Verification**: `dotnet build`/`-t:Rebuild` clean (0 errors) after every change above,
-same as 4a/4b. `DragEventArgs`/`UIElement` drag-and-drop members
-(`AllowDrop`/`DragOver`/`Drop`/`AcceptedOperation`/`DataView`/`GetDeferral`) were confirmed
-against the real compiled `Microsoft.WinUI.dll` the same reflection way as 4a/4b's API
-checks; `DataPackageView.GetStorageItemsAsync`/`StandardDataFormats.StorageItems` are
-system `Windows.ApplicationModel.DataTransfer` types outside that assembly and were
-**not** independently re-verified this way — trusted as long-stable, unchanged-since-UWP
-API. **A real interactive launch was attempted and did not succeed**, but for a reason
-unrelated to this app's code: a `dotnet publish` (self-contained, unpackaged — this
-project has no MSIX signing certificate checked in, so a properly packaged/signed launch
-wasn't attempted) crashed at process startup, before any app code runs, with
-`COMException 0x80040154 (REGDB_E_CLASSNOTREG)` inside the Windows App SDK's own
-`DeploymentManager` auto-initializer — a known unpackaged-deployment requirement (the
-Windows App SDK **runtime redistributable**'s COM registration, distinct from the AppX
-framework packages already present on this machine) that installing
-`Microsoft.WindowsAppRuntime.1.7`/`.2` via `winget` did not resolve. Since this crash
-happens in SDK bootstrap code before `App`/`MainWindow` construction, it is provably
-unrelated to anything in this diff — but it does mean **none of Phase 4's work (4a/4b/4d)
-has been run interactively by anyone yet, this session included**. Needs the user to
-rebuild via Visual Studio (the packaged/deployed path this app is actually designed for)
+- **Verification**: `dotnet build`/`-t:Rebuild` clean (0 errors) after every change above,  
+same as 4a/4b. `DragEventArgs`/`UIElement` drag-and-drop members  
+(`AllowDrop`/`DragOver`/`Drop`/`AcceptedOperation`/`DataView`/`GetDeferral`) were confirmed  
+against the real compiled `Microsoft.WinUI.dll` the same reflection way as 4a/4b's API  
+checks; `DataPackageView.GetStorageItemsAsync`/`StandardDataFormats.StorageItems` are  
+system `Windows.ApplicationModel.DataTransfer` types outside that assembly and were  
+**not** independently re-verified this way — trusted as long-stable, unchanged-since-UWP  
+API. **A real interactive launch was attempted and did not succeed**, but for a reason  
+unrelated to this app's code: a `dotnet publish` (self-contained, unpackaged — this  
+project has no MSIX signing certificate checked in, so a properly packaged/signed launch  
+wasn't attempted) crashed at process startup, before any app code runs, with  
+`COMException 0x80040154 (REGDB_E_CLASSNOTREG)` inside the Windows App SDK's own  
+`DeploymentManager` auto-initializer — a known unpackaged-deployment requirement (the  
+Windows App SDK **runtime redistributable**'s COM registration, distinct from the AppX  
+framework packages already present on this machine) that installing  
+`Microsoft.WindowsAppRuntime.1.7`/`.2` via `winget` did not resolve. Since this crash  
+happens in SDK bootstrap code before `App`/`MainWindow` construction, it is provably  
+unrelated to anything in this diff — but it does mean **none of Phase 4's work (4a/4b/4d)**  
+**has been run interactively by anyone yet, this session included**. Needs the user to  
+rebuild via Visual Studio (the packaged/deployed path this app is actually designed for)  
 and confirm both the original bug and the new features.
 
 ### 4c — Testing
@@ -615,51 +616,51 @@ and confirm both the original bug and the new features.
 
 ## Phase 6 — Native SwiftUI formatting toolbar (macOS)
 
-**Status: DONE.** Built directly on `main` (no worktree this time — the worktree round
-trip is what caused the earlier "doesn't work"/testing-location confusion, so this phase
-was built and verified where the user actually opens the project), across two commits:
-`1b0f211` (Vue-side bridge + composable) and `5a74ae9` (Swift-side toolbar). Verified with
-`bun run test` (48/48, 22 new), `bun run type-check` (clean), and **two** real
-`xcodebuild` runs — an incremental build and a full `clean build` — both
-`** BUILD SUCCEEDED **` with zero real warnings (only the two benign toolchain notes every
+**Status: DONE.** Built directly on `main` (no worktree this time — the worktree round  
+trip is what caused the earlier "doesn't work"/testing-location confusion, so this phase  
+was built and verified where the user actually opens the project), across two commits:  
+`1b0f211` (Vue-side bridge + composable) and `5a74ae9` (Swift-side toolbar). Verified with  
+`bun run test` (48/48, 22 new), `bun run type-check` (clean), and **two** real  
+`xcodebuild` runs — an incremental build and a full `clean build` — both  
+`** BUILD SUCCEEDED **` with zero real warnings (only the two benign toolchain notes every  
 prior build has also shown: destination-selection and AppIntents-metadata-skip).
 
 ### Decisions locked in (confirmed with user, 2026-08-25)
 
-- **Underline is skipped entirely** — not added to the schema or toolbar. Tiptap's own
-`Underline` extension serializes it as `++text++`, which isn't CommonMark/GFM; Rust's
-`render_markdown` (pulldown-cmark) has no such extension enabled and would show the
-literal `++` characters in Reading view — a real, visible editor/Reading-view mismatch,
-and non-portable to any other markdown tool (GitHub included). Not worth it for a mark
-this redundant with bold/italic/strikethrough. (Confirms and closes the review the
+- **Underline is skipped entirely** — not added to the schema or toolbar. Tiptap's own  
+`Underline` extension serializes it as `++text++`, which isn't CommonMark/GFM; Rust's  
+`render_markdown` (pulldown-cmark) has no such extension enabled and would show the  
+literal `++` characters in Reading view — a real, visible editor/Reading-view mismatch,  
+and non-portable to any other markdown tool (GitHub included). Not worth it for a mark  
+this redundant with bold/italic/strikethrough. (Confirms and closes the review the  
 original `underline: false` schema comment from Phase 0 was flagging.)
-- **The Reading/Edit mode toggle moves from its current in-content Vue button into the
-native toolbar**, consolidated alongside the existing "Source" toggle and the new
+- **The Reading/Edit mode toggle moves from its current in-content Vue button into the**  
+**native toolbar**, consolidated alongside the existing "Source" toggle and the new  
 formatting buttons — one coherent native toolbar instead of two separate UIs.
 
 ### Toolbar surface
 
 - **Marks**: Bold, Italic, Strikethrough, inline Code.
-- **Blocks**: heading level (Paragraph, H1-H6) via a `Menu`; Blockquote, Bullet list,
+- **Blocks**: heading level (Paragraph, H1-H6) via a `Menu`; Blockquote, Bullet list,  
 Ordered list, Task list, Code block — each a toggle button; Horizontal rule (insert-only).
 - **Link**: add/edit/remove via a small popover with a URL `TextField`.
-- **Image**: URL-based insert via a popover (not local-file insert — no vault-relative
-asset storage path exists yet, per Phase 2's paste-safety research; local-file insert
+- **Image**: URL-based insert via a popover (not local-file insert — no vault-relative  
+asset storage path exists yet, per Phase 2's paste-safety research; local-file insert  
 stays out of scope until that gap is addressed, same as Phase 5's existing note on this).
 - **Footnote**: insert via a popover for the label, same shape as link/image.
-- **Table row/column controls stay as the existing in-content `TableControls.vue`** —
+- **Table row/column controls stay as the existing in-content** `TableControls.vue` —  
 contextual/spatial to being inside a table, doesn't belong in a global toolbar.
-- **Undo/redo**: verify first whether Cmd+Z/Cmd+Shift+Z already work correctly via the
-WebView's own focus (WKWebView's contenteditable undo is DOM-native, so this may already
-just work with no custom wiring) before adding toolbar buttons/commands for it — don't
-build what might not be needed. **Deferred, not built**: this environment has no way to
-interactively drive the GUI to verify it, and the plan explicitly said not to build
-speculatively — no `undo`/`redo` commands or buttons exist yet.
-`EditorToolbarState.canUndo`/`canRedo` are still computed and decoded on both sides
-(harmless, forward-compatible), just not wired to anything yet. **Needs a human to
-verify Cmd+Z with the WebView focused before this is picked back up.**
-- No Rust changes needed for this phase — dropping underline removes the one thing that
-would have required checking/extending `render.rs`'s ammonia sanitizer allowlist.
+- **Undo/redo**: verify first whether Cmd+Z/Cmd+Shift+Z already work correctly via the  
+WebView's own focus (WKWebView's contenteditable undo is DOM-native, so this may already  
+just work with no custom wiring) before adding toolbar buttons/commands for it — don't  
+build what might not be needed. **Deferred, not built**: this environment has no way to  
+interactively drive the GUI to verify it, and the plan explicitly said not to build  
+speculatively — no `undo`/`redo` commands or buttons exist yet.  
+`EditorToolbarState.canUndo`/`canRedo` are still computed and decoded on both sides  
+(harmless, forward-compatible), just not wired to anything yet. **Needs a human to**  
+**verify Cmd+Z with the WebView focused before this is picked back up.**
+- No Rust changes needed for this phase — dropping underline removes the one thing that  
+would have required checking/extending `render.rs`'s ammonia sanitizer allowlist.  
 Confirmed true: this phase touched no Rust file.
 
 ### Bridge protocol additions
@@ -775,12 +776,12 @@ Confirmed true: this phase touched no Rust file.
 
 ## Phase 7 — Copy-to-clipboard button on code blocks
 
-**Status: DONE.** Built directly on `main` (no worktree), across two commits: `8866cb2`
-(WYSIWYG editor NodeView + shared utilities) and `8cd05c3` (Reading view stamping). Real
-verification: `bun run test` → **53/53** (5 new tests), `bun run type-check` clean, a real
-`xcodebuild build` (`** BUILD SUCCEEDED **`, log grepped for `warning:|error:` — only the
-two benign toolchain notes every prior phase has also shown), and a production
-`bun run build-only` (`dist/` 733.98 kB → 748.96 kB raw, \~15 kB for the whole feature, no
+**Status: DONE.** Built directly on `main` (no worktree), across two commits: `8866cb2`  
+(WYSIWYG editor NodeView + shared utilities) and `8cd05c3` (Reading view stamping). Real  
+verification: `bun run test` → **53/53** (5 new tests), `bun run type-check` clean, a real  
+`xcodebuild build` (`** BUILD SUCCEEDED **`, log grepped for `warning:|error:` — only the  
+two benign toolchain notes every prior phase has also shown), and a production  
+`bun run build-only` (`dist/` 733.98 kB → 748.96 kB raw, \~15 kB for the whole feature, no  
 new npm dependency pulled in).
 
 - [x] **Design**: hover-revealed button, top-right corner, inline SVG copy/check glyphs
@@ -855,10 +856,10 @@ new npm dependency pulled in).
 
 ## Key files
 
-- `vue-project/src/editor/markdown/footnoteExtension.ts`,
+- `vue-project/src/editor/markdown/footnoteExtension.ts`,  
 `vue-project/src/editor/markdown/headingIdExtension.ts` (new)
 - `vue-project/src/editor/WysiwygEditor.vue` + node view components (new)
-- `vue-project/src/composables/slugify.ts` (new, extracted), `useDocumentOutline.ts`
+- `vue-project/src/composables/slugify.ts` (new, extracted), `useDocumentOutline.ts`  
 (updated import), `useEditorOutline.ts` (new)
 - `vue-project/src/bridge/nativeBridge.ts` (new `documentEdit` method)
 - `vue-project/src/App.vue`
@@ -867,24 +868,24 @@ new npm dependency pulled in).
 - `rust/markdown_core/src/render.rs` (new round-trip golden-fixture tests)
 - `rust/markdown_vault/src/outline.rs` (parity target, referenced by tests)
 - `fixtures/markdown-roundtrip/*.md` (new — confirm location before creating)
-- Phase 6 additions (all done, commits `1b0f211`/`5a74ae9`):
-`vue-project/src/editor/formatCommands.ts` (new), `vue-project/src/composables/ useEditorToolbarState.ts` (new), `vue-project/src/editor/useWysiwygDocument.ts`
-(`runEditorCommand` installed), `vue-project/src/App.vue` (in-content mode toggle
-removed), `macos/Markdown/Markdown/EditorToolbarState.swift` (new),
-`macos/Markdown/Markdown/EditorFormattingToolbar.swift` (new),
+- Phase 6 additions (all done, commits `1b0f211`/`5a74ae9`):  
+`vue-project/src/editor/formatCommands.ts` (new), `vue-project/src/composables/ useEditorToolbarState.ts` (new), `vue-project/src/editor/useWysiwygDocument.ts`  
+(`runEditorCommand` installed), `vue-project/src/App.vue` (in-content mode toggle  
+removed), `macos/Markdown/Markdown/EditorToolbarState.swift` (new),  
+`macos/Markdown/Markdown/EditorFormattingToolbar.swift` (new),  
 `macos/Markdown/Markdown/MarkdownWebView.swift`/`ContentView.swift` (toolbar wiring)
-- Phase 4 additions (all done, not yet committed):
-`win/MarkdownWin/MarkdownWin/EditorToolbarState.cs` (new),
-`win/MarkdownWin/MarkdownWin/MarkdownWebView.xaml.cs` (`DocumentEdited`/
-`EditorStateChanged` events, `FlushPendingEditAsync`/`RunEditorCommandAsync`),
-`win/MarkdownWin/MarkdownWin/Workspace.cs` (`FlushEditorPendingEdit`, flush-ordering fix
-in `FlushPendingSaveAsync`, `OpenFileAsync`/`OpenDroppedAsync`/`UnsupportedDropException`,
-direct-disk-write fallback), `win/MarkdownWin/MarkdownWin/FileNode.cs`
-(`MarkdownFile.PickerExtensions`), `win/MarkdownWin/MarkdownWin/MainWindow.xaml`/`.xaml.cs`
+- Phase 4 additions (all done, not yet committed):  
+`win/MarkdownWin/MarkdownWin/EditorToolbarState.cs` (new),  
+`win/MarkdownWin/MarkdownWin/MarkdownWebView.xaml.cs` (`DocumentEdited`/  
+`EditorStateChanged` events, `FlushPendingEditAsync`/`RunEditorCommandAsync`),  
+`win/MarkdownWin/MarkdownWin/Workspace.cs` (`FlushEditorPendingEdit`, flush-ordering fix  
+in `FlushPendingSaveAsync`, `OpenFileAsync`/`OpenDroppedAsync`/`UnsupportedDropException`,  
+direct-disk-write fallback), `win/MarkdownWin/MarkdownWin/FileNode.cs`  
+(`MarkdownFile.PickerExtensions`), `win/MarkdownWin/MarkdownWin/MainWindow.xaml`/`.xaml.cs`  
 (native formatting toolbar, Source relabel, toolbar-state wiring, Open File…, drag-and-drop)
 
 ## Full rationale
 
-See `.claude/docs/live-preview-editing-research.md` and its linked prior-art docs
-(`jotty-editor-research.md`, `marktext-muya-research.md`, `tiptap-research.md`,
+See `.claude/docs/live-preview-editing-research.md` and its linked prior-art docs  
+(`jotty-editor-research.md`, `marktext-muya-research.md`, `tiptap-research.md`,  
 `quill-research.md`) for the complete reasoning behind every decision above.

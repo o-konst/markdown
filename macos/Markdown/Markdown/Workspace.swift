@@ -52,6 +52,12 @@ final class Workspace {
     /// Set when the last open attempt failed; shown under the sidebar tree.
     private(set) var errorMessage: String?
 
+    /// Commit id of the last successful create/rename/delete, `nil` for a folder create
+    /// (git does not track empty folders, so there is nothing to commit) or when nothing has
+    /// been mutated yet. Reserved for a future "Undo Last Change" File-menu item, mirroring
+    /// `ChatViewModel.undo(commit:vaultRoot:)`.
+    private(set) var lastChangeCommit: String?
+
     /// Typed into the toolbar's search field; drives `searchHits`.
     var searchQuery = "" {
         didSet {
@@ -70,6 +76,11 @@ final class Workspace {
     /// Held so the sandbox keeps letting us reach whatever was opened — a folder's full
     /// subtree, or (when there is no folder) just the one file.
     private var scopedResource: URL?
+
+    /// Persists which folders/files have been opened before, so they can be reopened via
+    /// `openRecent(_:)` without going through `.fileImporter` again — see
+    /// `.claude/plans/recent-vaults-plan.md`.
+    let recentVaults = RecentVaultsStore()
 
     /// The in-flight search, cancelled whenever the query changes again.
     private var searchTask: Task<Void, Never>?
@@ -92,6 +103,14 @@ final class Workspace {
     /// no assistant for it, just direct reading and writing of that one file.
     var isSingleFile: Bool { root == nil && selectedFile != nil }
 
+    /// True when nothing is open at all — the state every launch starts in, since no
+    /// vault is auto-reopened. Drives `ContentView`'s welcome screen.
+    var isEmpty: Bool { root == nil && selectedFile == nil }
+
+    /// Drives which content-area view `ContentView` shows. Defaults to `.markdown` when
+    /// nothing is selected, matching the untitled placeholder editor shown today.
+    var selectedFileKind: FileKind { selectedFile.map(FileKind.of) ?? .markdown }
+
     func open(folder url: URL) async {
         await flushPendingSaveAsync(to: selectedFile)
         watcher?.stop()
@@ -103,6 +122,7 @@ final class Workspace {
         if url.startAccessingSecurityScopedResource() {
             scopedResource = url
         }
+        recentVaults.record(url: url, isFolder: true)
 
         let node = FileNode(url: url, isDirectory: true)
         node.loadChildren()
@@ -145,10 +165,28 @@ final class Workspace {
         if url.startAccessingSecurityScopedResource() {
             scopedResource = url
         }
+        recentVaults.record(url: url, isFolder: false)
 
         root = nil
         selectedFile = url
         loadSelectedFile()
+    }
+
+    /// Reopens a folder or file previously recorded in `recentVaults`, resolving its
+    /// persisted bookmark back to a URL first. Reports and gives up if the bookmark can no
+    /// longer be resolved (the item was deleted or moved off its volume) — `recentVaults`
+    /// has already dropped the entry by the time this returns `nil`.
+    func openRecent(_ entry: RecentVaultEntry) async {
+        guard let url = recentVaults.resolve(entry) else {
+            reportOpenFailure(RecentVaultUnavailableError(displayName: entry.displayName))
+            return
+        }
+
+        if entry.isFolder {
+            await open(folder: url)
+        } else {
+            await open(file: url)
+        }
     }
 
     /// Closes whatever is open — a folder, or a single file — releasing its sandbox access.
@@ -314,6 +352,223 @@ final class Workspace {
         }
     }
 
+    /// Copies `data` into the vault's `assets` folder, opening (and, if this is the very
+    /// first write anywhere in the folder, baselining) the vault the same way any other
+    /// first edit would — see `vaultStore()`. Throws if there is no open folder to import
+    /// into (e.g. a single file opened with no vault).
+    func importAsset(filename: String, data: Data) throws -> (path: String, mime: String) {
+        try vaultStore().importAsset(filename: filename, data: data)
+    }
+
+    /// Reads a vault file's raw bytes, for the web view's asset-serving fallback (e.g. an
+    /// inline image dropped into a note). `nil` on any failure — including "no folder is
+    /// open" — so a scheme-handler miss just 404s rather than surfacing an error dialog.
+    ///
+    /// Opens the vault on demand like `importAsset` above: rendering a note that references
+    /// an asset can now cause the vault's first-open baseline commit to happen a little
+    /// earlier than an actual edit would have. Accepted trade-off — an asset reference can
+    /// only exist in a note in the first place because something already imported it
+    /// through this same vault, so by the time this matters the vault has virtually always
+    /// been opened already.
+    func readAsset(_ path: String) -> (data: Data, mime: String)? {
+        try? vaultStore().readAsset(path)
+    }
+
+    // MARK: - Sidebar file management
+
+    /// Validates a name typed for a new note/folder or a rename, before anything reaches the
+    /// vault. Returns a message to show the user, or `nil` if the name is fine. Deliberately
+    /// narrow — everything else, in particular "already exists", is left to the vault, whose
+    /// `VaultError` messages are already written to be read by a person.
+    static func nameValidationError(_ name: String) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return "Name can't be empty." }
+        if trimmed.contains("/") || trimmed.contains(":") { return "Name can't contain \"/\" or \":\"." }
+        if trimmed == "." || trimmed == ".." { return "\"\(trimmed)\" isn't a valid name." }
+        if trimmed.hasPrefix(".") { return "Name can't start with \".\" — it would become hidden." }
+        return nil
+    }
+
+    /// Creates an empty note inside `directory`, named `Untitled.md`/`Untitled 2.md`/… —
+    /// whatever is unused — so the sidebar can drop straight into inline rename, Finder-style,
+    /// with no name prompt up front. Returns the new file's URL on success.
+    @discardableResult
+    func createNote(in directory: URL) async -> URL? {
+        await save()
+        do {
+            let name = availableName(base: "Untitled", extension: "md", in: directory)
+            let newURL = directory.appendingPathComponent(name)
+            let relative = try vaultRelative(newURL)
+            try rejectIfGitInternals(relative)
+            lastChangeCommit = try vaultStore().createFile(relative, contents: "")
+            revealAfterMutation(in: directory)
+            errorMessage = nil
+            selectFile(newURL)
+            return newURL
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Creates an empty folder inside `directory`, named `New Folder`/`New Folder 2`/… —
+    /// same auto-naming as `createNote(in:)`. A `nil` commit id from the vault call is
+    /// expected, not a failure — git does not track empty folders. Returns the new folder's
+    /// URL on success (regardless of whether a commit was made).
+    @discardableResult
+    func createFolder(in directory: URL) async -> URL? {
+        await save()
+        do {
+            let name = availableName(base: "New Folder", extension: nil, in: directory)
+            let newURL = directory.appendingPathComponent(name)
+            let relative = try vaultRelative(newURL)
+            try rejectIfGitInternals(relative)
+            lastChangeCommit = try vaultStore().createFolder(relative)
+            revealAfterMutation(in: directory)
+            errorMessage = nil
+            return newURL
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// The next unused Finder-style name in `directory` — `"New Folder"`, `"New Folder 2"`, …
+    /// (or `"Untitled.md"`, `"Untitled 2.md"`, … when `extension` is given) — checked against
+    /// whatever children are currently loaded for that directory. If the directory has never
+    /// been expanded there is nothing loaded to check against yet; a collision there is rare
+    /// and the vault's own "already exists" rejection is the backstop.
+    private func availableName(base: String, extension ext: String?, in directory: URL) -> String {
+        let existing = Set((node(for: directory)?.children ?? []).map(\.name))
+        func candidate(_ n: Int) -> String {
+            let label = n == 1 ? base : "\(base) \(n)"
+            return ext.map { "\(label).\($0)" } ?? label
+        }
+        var n = 1
+        while existing.contains(candidate(n)) { n += 1 }
+        return candidate(n)
+    }
+
+    /// Renames or moves-in-place a file or folder to `newName`, kept in its current parent.
+    @discardableResult
+    func rename(_ url: URL, to newName: String) async -> Bool {
+        await save()
+        do {
+            if let reason = Self.nameValidationError(newName) { throw SidebarMutationError.invalidName(reason) }
+            let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let fromRelative = try vaultRelative(url)
+            try rejectIfGitInternals(fromRelative)
+            let newURL = url.deletingLastPathComponent().appendingPathComponent(trimmed)
+            let toRelative = try vaultRelative(newURL)
+            try rejectIfGitInternals(toRelative)
+            // Captured before the rename touches the tree: `refresh()` below matches old and
+            // new contents by URL, so the renamed node itself never matches (its URL just
+            // changed) and would otherwise come back collapsed with its whole loaded subtree
+            // discarded, even though nothing on disk changed but the name.
+            let preserved = node(for: url)
+            lastChangeCommit = try vaultStore().move(from: fromRelative, to: toRelative)
+            root?.refresh()
+            if let preserved {
+                node(for: newURL)?.adoptSubtree(from: preserved)
+            }
+            repointSelection(from: url, to: newURL)
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Deletes a file or folder — recursively for a folder, per `markdown_vault`'s `delete`.
+    @discardableResult
+    func delete(_ url: URL) async -> Bool {
+        await save()
+        do {
+            let relative = try vaultRelative(url)
+            try rejectIfGitInternals(relative)
+            lastChangeCommit = try vaultStore().delete(relative)
+            clearSelectionIfAffected(by: url)
+            root?.refresh()
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Vault-relative path of `url`, or a readable error when there is no open folder (a
+    /// single file, or nothing open) or `url` falls outside it.
+    private func vaultRelative(_ url: URL) throws -> String {
+        guard let relative = relativePath(of: url) else {
+            throw SidebarMutationError.outsideFolder
+        }
+        return relative
+    }
+
+    /// `.git` is reachable through `confine::resolve_in` like any other vault path — nothing
+    /// on the Rust side singles it out — so this is the only thing stopping a rename or
+    /// delete issued from the tree from touching the vault's own history. The tree also never
+    /// lists dot-entries (`FileNode.contents(of:)`), so this is belt-and-braces.
+    private func rejectIfGitInternals(_ relative: String) throws {
+        if relative == ".git" || relative.hasPrefix(".git/") {
+            throw SidebarMutationError.gitInternals
+        }
+    }
+
+    /// After creating something inside `directory`, the merging `refresh()` alone will not
+    /// reveal it if `directory` has never been expanded — `refresh()` only recurses where
+    /// children are already loaded, by design. Force that one directory open in that case;
+    /// otherwise a plain refresh is enough to pick up the new entry.
+    private func revealAfterMutation(in directory: URL) {
+        root?.refresh()
+        guard let target = node(for: directory), target.children == nil else { return }
+        target.loadChildren()
+        target.isExpanded = true
+    }
+
+    private func node(for url: URL, in start: FileNode? = nil) -> FileNode? {
+        guard let start = start ?? root else { return nil }
+        if start.url == url { return start }
+        for child in start.children ?? [] {
+            if let found = node(for: url, in: child) { return found }
+        }
+        return nil
+    }
+
+    /// Moves the selection along with a rename — of the file itself, or of an ancestor
+    /// folder the selected file lives inside.
+    private func repointSelection(from oldURL: URL, to newURL: URL) {
+        guard let selectedFile else { return }
+        let oldPath = oldURL.standardizedFileURL.path
+        let selectedPath = selectedFile.standardizedFileURL.path
+
+        if selectedPath == oldPath {
+            selectFile(newURL)
+        } else if selectedPath.hasPrefix(oldPath + "/") {
+            let suffix = selectedPath.dropFirst(oldPath.count)
+            selectFile(URL(fileURLWithPath: newURL.standardizedFileURL.path + suffix))
+        }
+    }
+
+    /// Clears the selection when the deleted item is, or contains, the selected file —
+    /// resetting the buffer *before* `selectFile(nil)` so the debounced-save machinery that
+    /// runs when the selection actually changes has nothing left to write back to the path
+    /// that is about to stop existing.
+    private func clearSelectionIfAffected(by url: URL) {
+        guard let selectedFile else { return }
+        let deletedPath = url.standardizedFileURL.path
+        let selectedPath = selectedFile.standardizedFileURL.path
+        guard selectedPath == deletedPath || selectedPath.hasPrefix(deletedPath + "/") else { return }
+
+        autosaveTask?.cancel()
+        autosaveTask = nil
+        hasUnsavedChanges = false
+        text = Self.untitledText
+        selectFile(nil)
+    }
+
     /// Opens the vault on demand. See `vault` for why this is not done when the folder opens.
     private func vaultStore() throws -> VaultStore {
         if let vault { return vault }
@@ -330,6 +585,15 @@ final class Workspace {
 
     private func loadSelectedFile() {
         guard let url = selectedFile else { return }
+        switch FileKind.of(url) {
+        case .image, .pdf:
+            // Read-only viewers load their own bytes straight from `url` (see ImageViewer/
+            // PDFViewerView) — leave `text`/autosave/hasUnsavedChanges untouched.
+            errorMessage = nil
+            return
+        case .markdown, .plainText:
+            break
+        }
         do {
             text = try String(contentsOf: url, encoding: .utf8)
             // Assigning `text` scheduled a save; the file is what is on disk, so cancel it.
@@ -352,4 +616,27 @@ final class Workspace {
 /// through the same error path a failed file picker would use.
 private struct UnsupportedDropError: LocalizedError {
     var errorDescription: String? { "Only folders and Markdown files can be opened here." }
+}
+
+/// A create/rename/delete issued from the sidebar was refused before it ever reached the
+/// vault. See `Workspace`'s "Sidebar file management" section.
+private enum SidebarMutationError: LocalizedError {
+    case outsideFolder
+    case gitInternals
+    case invalidName(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .outsideFolder: "That item is outside the open folder."
+        case .gitInternals: "That is part of this folder's history and can't be changed here."
+        case .invalidName(let reason): reason
+        }
+    }
+}
+
+/// A recent-vaults entry's bookmark could not be resolved to a URL — the item was likely
+/// deleted or moved off its volume since it was last opened.
+private struct RecentVaultUnavailableError: LocalizedError {
+    let displayName: String
+    var errorDescription: String? { "Could not reopen \(displayName). It may have been moved or deleted." }
 }

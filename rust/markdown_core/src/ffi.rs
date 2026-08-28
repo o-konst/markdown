@@ -50,6 +50,21 @@ pub unsafe extern "C" fn md_asset_lookup(path: *const c_char, out: *mut MdAsset)
     true
 }
 
+/// Checks whether `path` matches a real embedded file exactly — unlike [`md_asset_lookup`],
+/// without its single-page-app fallback to `index.html`. For a caller that needs to tell "this
+/// is a genuine embedded UI route" apart from "nothing here, try something else" (e.g. a vault
+/// attachment served through the same URL scheme by falling back past this crate entirely).
+///
+/// # Safety
+/// `path` must be a valid NUL terminated string.
+#[no_mangle]
+pub unsafe extern "C" fn md_asset_exists(path: *const c_char) -> bool {
+    let Some(path) = (unsafe { borrow_str(path) }) else {
+        return false;
+    };
+    catch_unwind(AssertUnwindSafe(|| crate::assets::exact(path).is_some())).unwrap_or(false)
+}
+
 /// Number of files baked into the library. Useful for start-up diagnostics.
 #[no_mangle]
 pub extern "C" fn md_asset_count() -> usize {
@@ -145,6 +160,23 @@ mod tests {
     fn lookup_rejects_null_output() {
         let path = CString::new("/").unwrap();
         assert!(!unsafe { md_asset_lookup(path.as_ptr(), core::ptr::null_mut()) });
+    }
+
+    #[test]
+    fn asset_exists_does_not_fall_back_to_the_spa_shell() {
+        let root = CString::new("/").unwrap();
+        assert!(unsafe { md_asset_exists(root.as_ptr()) }, "index.html is a real asset");
+
+        let unknown = CString::new("/assets/some-vault-file.png").unwrap();
+        assert!(
+            !unsafe { md_asset_exists(unknown.as_ptr()) },
+            "must not report an unmatched path as existing just because lookup() would fall back"
+        );
+    }
+
+    #[test]
+    fn asset_exists_rejects_null() {
+        assert!(!unsafe { md_asset_exists(core::ptr::null()) });
     }
 
     #[test]

@@ -2,6 +2,7 @@ import { Editor } from '@tiptap/vue-3'
 import { history } from '@tiptap/pm/history'
 
 import { onDocumentChange as bridgeOnDocumentChange, reportEdit as bridgeReportEdit } from '../bridge/nativeBridge'
+import { createFileImportHandlers, type ImportDependencies } from './fileImport'
 import { runFormatCommand } from './formatCommands'
 import { createExtensions } from './schema'
 
@@ -33,6 +34,9 @@ export interface WysiwygDocumentOptions {
    * failure) if omitted.
    */
   onSetMode?: (mode: 'reading' | 'edit') => void
+  /** Overridable for tests; defaults to the real bridge's `importAsset` in
+   * {@link ../bridge/nativeBridge}. See `./fileImport.ts`. */
+  importAsset?: ImportDependencies['importAsset']
 }
 
 export interface WysiwygDocument {
@@ -72,13 +76,28 @@ export function useWysiwygDocument(options: WysiwygDocumentOptions = {}): Wysiwy
   const reportEdit = options.reportEdit ?? bridgeReportEdit
   const subscribeToDocumentChange = options.onDocumentChange ?? bridgeOnDocumentChange
 
+  // `editorProps` must be supplied before the `Editor` it belongs to exists, so
+  // `createFileImportHandlers` is given a lazy accessor and `editorRef` is only assigned
+  // once construction below finishes — safe because the handlers are only ever invoked
+  // from a later drop/paste event, never during construction itself.
+  let editorRef: Editor | undefined
+  const importDependencies: ImportDependencies | undefined = options.importAsset
+    ? { importAsset: options.importAsset }
+    : undefined
+  const { handleDrop, handlePaste } = createFileImportHandlers(
+    () => editorRef as Editor,
+    importDependencies,
+  )
+
   const editor = new Editor({
     element: options.element ?? document.createElement('div'),
     extensions: createExtensions(),
     content: options.initialText ?? '',
     contentType: 'markdown',
     onUpdate: () => scheduleReport(),
+    editorProps: { handleDrop, handlePaste },
   })
+  editorRef = editor
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined
   let burstInFlight = false

@@ -15,6 +15,12 @@ struct ContentView: View {
     @State private var isChoosingFile = false
     @State private var isEditing = false
     @State private var isDropTargeted = false
+    @State private var isShowingPDFThumbnails = false
+
+    /// Whether the document outline panel is open — a toolbar-driven open/close panel
+    /// like `isShowingPDFThumbnails`, not a persisted setting (there used to be a
+    /// "Show contents tree" toggle in Settings; removed in favor of this).
+    @State private var isShowingOutline = false
 
     @State private var isShowingSettings = false
     @State private var isShowingLogin = false
@@ -22,7 +28,6 @@ struct ContentView: View {
     @State private var account = Account()
 
     /// Settings own the rendering options; the web UI owns the divider's width.
-    @AppStorage(PreferenceKey.outlineVisible) private var outlineVisible = true
     @AppStorage(PreferenceKey.contentWidth) private var contentWidth = ContentWidth.full
     @AppStorage(PreferenceKey.fontSize) private var fontSize = FontSize.standard
     @AppStorage(PreferenceKey.appearance) private var appearance = AppAppearance.system
@@ -41,7 +46,7 @@ struct ContentView: View {
 
     private var preferences: WebPreferences {
         WebPreferences(
-            outlineVisible: outlineVisible,
+            outlineVisible: isShowingOutline,
             contentWidth: contentWidth,
             fontSize: fontSize
         )
@@ -62,26 +67,52 @@ struct ContentView: View {
         } detail: {
             detail
                 .toolbar {
-                    EditorFormattingToolbar(
-                        state: toolbarState,
-                        isSourceViewShowing: isEditing,
-                        run: { command, payload in
-                            Task { @MainActor in _ = await runEditorCommand(command, payload) }
-                        }
-                    )
+                    // Formatting commands and the WYSIWYG/source toggle only make sense
+                    // for the Markdown editor — image/PDF/plain-text views have neither,
+                    // and neither does the welcome screen shown when nothing is open.
+                    if !workspace.isEmpty && workspace.selectedFileKind == .markdown {
+                        EditorFormattingToolbar(
+                            state: toolbarState,
+                            isSourceViewShowing: isEditing,
+                            run: { command, payload in
+                                Task { @MainActor in _ = await runEditorCommand(command, payload) }
+                            }
+                        )
 
-                    ToolbarItem {
-                        // The WYSIWYG editor (`preview`, below) is the primary way to edit
-                        // now — this toggle shows the plain-text source as a fallback, not
-                        // the main editing surface. Kept, not removed: a real two-way
-                        // binding to `workspace.text` like everything else, so editing
-                        // here is never an echo, just another writer.
-                        Toggle(isOn: $isEditing) {
-                            Label("Source", systemImage: "curlybraces")
+                        ToolbarItem {
+                            // The WYSIWYG editor (`preview`, below) is the primary way to edit
+                            // now — this toggle shows the plain-text source as a fallback, not
+                            // the main editing surface. Kept, not removed: a real two-way
+                            // binding to `workspace.text` like everything else, so editing
+                            // here is never an echo, just another writer.
+                            Toggle(isOn: $isEditing) {
+                                Label("Source", systemImage: "curlybraces")
+                            }
+                            .toggleStyle(.button)
+                            .keyboardShortcut("e", modifiers: .command)
+                            .help(isEditing ? "Hide the raw Markdown source" : "Show the raw Markdown source")
                         }
-                        .toggleStyle(.button)
-                        .keyboardShortcut("e", modifiers: .command)
-                        .help(isEditing ? "Hide the raw Markdown source" : "Show the raw Markdown source")
+
+                        ToolbarItem {
+                            Toggle(isOn: $isShowingOutline) {
+                                Label("Contents", systemImage: "list.bullet.indent")
+                            }
+                            .toggleStyle(.button)
+                            .disabled(!isOutlineAvailable)
+                            .help(isOutlineAvailable
+                                  ? (isShowingOutline ? "Hide Contents" : "Show Contents")
+                                  : "This document has no sections to navigate")
+                        }
+                    }
+
+                    if workspace.selectedFileKind == .pdf {
+                        ToolbarItem {
+                            Toggle(isOn: $isShowingPDFThumbnails) {
+                                Label("Page Thumbnails", systemImage: "sidebar.right")
+                            }
+                            .toggleStyle(.button)
+                            .help(isShowingPDFThumbnails ? "Hide Page Thumbnails" : "Show Page Thumbnails")
+                        }
                     }
                 }
         }
@@ -132,7 +163,7 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $isShowingSettings) {
-            SettingsView(isOutlineAvailable: isOutlineAvailable)
+            SettingsView()
         }
         .sheet(isPresented: $isShowingLogin) {
             LoginView(account: account)
@@ -145,15 +176,38 @@ struct ContentView: View {
         .focusedSceneValue(\.workspace, workspace)
     }
 
-    /// The preview fills the detail column; the editor covers it on demand.
-    ///
-    /// The editor is layered over the preview rather than swapped with it, so toggling
-    /// edit mode does not tear down the web view and reload the whole web UI.
+    /// Routes to a view per selected file kind. Markdown keeps the WYSIWYG editor (with
+    /// the raw-source overlay layered on top, on demand, so toggling it does not tear
+    /// down the web view and reload the whole web UI); everything else gets its own
+    /// dedicated, non-Markdown view.
     private var detail: some View {
-        ZStack {
-            preview
-            if isEditing {
-                editor
+        Group {
+            if workspace.isEmpty {
+                WelcomeView(
+                    workspace: workspace,
+                    openFolder: { isChoosingFolder = true },
+                    openFile: { isChoosingFile = true }
+                )
+            } else {
+                switch workspace.selectedFileKind {
+                case .markdown:
+                    ZStack {
+                        preview
+                        if isEditing {
+                            editor
+                        }
+                    }
+                case .plainText:
+                    editor
+                case .image:
+                    if let url = workspace.selectedFile {
+                        ImageViewer(url: url)
+                    }
+                case .pdf:
+                    if let url = workspace.selectedFile {
+                        PDFViewerView(url: url, isShowingThumbnails: isShowingPDFThumbnails)
+                    }
+                }
             }
         }
         #if os(macOS)
@@ -164,6 +218,7 @@ struct ContentView: View {
     private var editor: some View {
         TextEditor(text: $workspace.text)
             .font(.system(.body, design: .monospaced))
+            .padding(.horizontal, 16)
             .background(.background)
     }
 
@@ -175,7 +230,10 @@ struct ContentView: View {
             onDocumentEdit: { workspace.text = $0 },
             registerFlushPendingEdit: { workspace.flushEditorPendingEdit = $0 },
             onEditorStateChange: { toolbarState = $0 },
-            registerRunEditorCommand: { runEditorCommand = $0 }
+            registerRunEditorCommand: { runEditorCommand = $0 },
+            importAsset: { try workspace.importAsset(filename: $0, data: $1) },
+            readAsset: { workspace.readAsset($0) },
+            vaultRootURL: workspace.root?.url
         )
     }
 
@@ -188,6 +246,11 @@ extension FocusedValues {
     @Entry var folderPicker: Binding<Bool>?
     @Entry var filePicker: Binding<Bool>?
     @Entry var workspace: Workspace?
+
+    /// Published by `SidebarView`, since the name-prompt state (and the target-directory rule
+    /// in decision 6) lives there — the File menu just triggers it for the frontmost window.
+    @Entry var newNoteAction: (() -> Void)?
+    @Entry var newFolderAction: (() -> Void)?
 }
 
 #Preview {

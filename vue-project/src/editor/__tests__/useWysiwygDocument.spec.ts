@@ -18,6 +18,12 @@ describe('useWysiwygDocument', () => {
     vi.useRealTimers()
   })
 
+  it('wires file-drop/paste handlers into the editor (see fileImport.spec.ts for their behavior)', () => {
+    doc = useWysiwygDocument({ initialText: 'Hello', reportEdit: vi.fn() })
+    expect(typeof doc.editor.view.props.handleDrop).toBe('function')
+    expect(typeof doc.editor.view.props.handlePaste).toBe('function')
+  })
+
   describe('outbound edit reporting', () => {
     beforeEach(() => {
       vi.useFakeTimers()

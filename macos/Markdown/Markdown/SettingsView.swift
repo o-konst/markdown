@@ -9,10 +9,6 @@
 import SwiftUI
 
 struct SettingsView: View {
-    /// False when the open document has no sections, which makes the outline moot.
-    let isOutlineAvailable: Bool
-
-    @AppStorage(PreferenceKey.outlineVisible) private var outlineVisible = true
     @AppStorage(PreferenceKey.contentWidth) private var contentWidth = ContentWidth.full
     @AppStorage(PreferenceKey.fontSize) private var fontSize = FontSize.standard
     @AppStorage(PreferenceKey.appearance) private var appearance = AppAppearance.system
@@ -35,17 +31,6 @@ struct SettingsView: View {
                     Link("Get an API key from console.anthropic.com",
                          destination: URL(string: "https://console.anthropic.com/settings/keys")!)
                         .font(.caption)
-                }
-
-                Section("Contents") {
-                    Toggle("Show contents tree", isOn: $outlineVisible)
-                        .disabled(!isOutlineAvailable)
-
-                    if !isOutlineAvailable {
-                        Text("The open document has no sections to navigate.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                 }
 
                 Section("Appearance") {
@@ -95,5 +80,5 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView(isOutlineAvailable: true)
+    SettingsView()
 }
